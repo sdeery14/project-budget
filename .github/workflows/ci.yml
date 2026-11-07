@@ -75,6 +75,25 @@ jobs:
       - run: uv sync --group dev
       - run: uv run pytest --cov --cov-report=term
 
+  docker:
+    name: Container answers /health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build image
+        run: docker build --build-arg VERSION=0.0.0.dev0 -t projectbudget:ci .
+      - name: Run with SQLite on a volume and wait for /health
+        run: |
+          docker run -d --name pb -p 8000:8000 -v pb-data:/data projectbudget:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health; then echo; exit 0; fi
+            sleep 1
+          done
+          echo "::error::/health did not answer within 30s"; docker logs pb; exit 1
+      - name: Show startup log
+        if: always()
+        run: docker logs pb || true
+
   security:
     name: Security scans
     runs-on: ubuntu-latest
