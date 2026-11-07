@@ -17,9 +17,10 @@ def test_health_ok_when_database_answers(settings: Settings) -> None:
 
 
 def test_health_503_when_database_unreachable(tmp_path: Path) -> None:
-    # A read-only, non-existent SQLite file cannot be opened, so SELECT 1 fails.
-    missing = tmp_path / "missing" / "nope.sqlite"
-    bad = Settings(database_url=f"{sqlite_url(missing)}?mode=ro&uri=true", data_dir=tmp_path)
+    # SQLite cannot open a directory as a database on any platform, so SELECT 1 fails.
+    not_a_file = tmp_path / "is_a_directory"
+    not_a_file.mkdir()
+    bad = Settings(database_url=sqlite_url(not_a_file), data_dir=tmp_path)
     with TestClient(create_app(bad)) as client:
         response = client.get("/health")
     assert response.status_code == 503
