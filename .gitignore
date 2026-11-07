@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.python-version.local
+
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+
+# Secrets and local config (ADR-005: secrets never live in the repo)
+.env
+.env.*
+!.env.example
+
+# Local data
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

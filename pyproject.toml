@@ -1,0 +1,133 @@
+[build-system]
+requires = ["hatchling>=1.27", "hatch-vcs>=0.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "projectbudget"
+dynamic = ["version"]
+description = "One honest shopping backlog across all your projects, scheduled against your budget."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.12"
+authors = [{ name = "Sean Deery" }]
+keywords = ["budget", "projects", "backlog", "forecast", "self-hosted", "maker"]
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "Environment :: Web Environment",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business :: Financial",
+  "Typing :: Typed",
+]
+# Runtime dependencies arrive with the app skeleton in PR2 (ADR-001, ADR-010).
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/sdeery14/project-budget"
+Documentation = "https://github.com/sdeery14/project-budget/tree/main/docs"
+Issues = "https://github.com/sdeery14/project-budget/issues"
+Changelog = "https://github.com/sdeery14/project-budget/releases"
+
+[dependency-groups]
+dev = [
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "pytest>=8.3",
+  "pytest-cov>=6",
+  "hypothesis>=6.115",
+  "pre-commit>=4",
+  "pip-audit>=2.7",
+  "bandit>=1.8",
+]
+
+# ---------------------------------------------------------------------------
+# Build: version comes from the git tag (ADR-010).
+# ---------------------------------------------------------------------------
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+local_scheme = "no-local-version"
+fallback_version = "0.0.0"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/projectbudget"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/", "tests/", "docs/", "LICENSE", "NOTICE", "README.md"]
+
+# ---------------------------------------------------------------------------
+# Lint and format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade
+  "B",   # bugbear
+  "SIM", # simplify
+  "C4",  # comprehensions
+  "PT",  # pytest style
+  "RUF", # ruff-specific
+  "N",   # naming
+  "S",   # bandit-style security checks
+  "T20", # no stray print()
+]
+ignore = [
+  "E501", # line length is enforced by the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"] # assert is the point of a test
+
+[tool.ruff.lint.isort]
+known-first-party = ["projectbudget"]
+
+# ---------------------------------------------------------------------------
+# Types: strict everywhere the RFC requires it (domain, services) and, while
+# the package is empty, everywhere else too. Relax per module only with a reason.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+strict = true
+warn_unreachable = true
+pretty = true
+show_error_codes = true
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+xfail_strict = true
+filterwarnings = ["error"]
+markers = [
+  "postgres: needs PROJECTBUDGET_TEST_DATABASE_URL pointing at a PostgreSQL server",
+]
+
+[tool.coverage.run]
+source = ["projectbudget"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+# ---------------------------------------------------------------------------
+# Security scanning (CI "security" job)
+# ---------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
