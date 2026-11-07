@@ -1,0 +1,6 @@
+* text=auto eol=lf
+uv.lock linguist-generated=true -diff
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

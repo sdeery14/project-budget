@@ -1,0 +1,47 @@
+# Contributing
+
+Thanks for helping. The design is settled in the [RFC v3](docs/rfc/ProjectBudget-RFC-v3.md) and the [ADRs](docs/adr/); most contributions implement a row of the RFC's roadmap or PR table.
+
+## One-command setup
+
+```sh
+uv sync --group dev && uv run pre-commit install
+```
+
+That installs Python 3.12 if needed, creates `.venv`, installs the dev tools, and wires the pre-commit hooks. Nothing else is required for the SQLite path. For the PostgreSQL path, point `PROJECTBUDGET_TEST_DATABASE_URL` at a server, for example:
+
+```sh
+docker run --rm -d -p 5432:5432 -e POSTGRES_USER=projectbudget -e POSTGRES_PASSWORD=projectbudget -e POSTGRES_DB=projectbudget_test postgres:16
+export PROJECTBUDGET_TEST_DATABASE_URL=postgresql+psycopg://projectbudget:projectbudget@localhost:5432/projectbudget_test
+```
+
+## Everyday commands
+
+| Task | Command |
+| --- | --- |
+| Lint and format | `uv run ruff check --fix . && uv run ruff format .` |
+| Types | `uv run mypy` |
+| Tests | `uv run pytest` |
+| Everything pre-commit checks | `uv run pre-commit run --all-files` |
+| Dependency audit | `uv run pip-audit` |
+
+CI runs the same commands on both SQLite and PostgreSQL. A PR merges only when both are green.
+
+## Conventions
+
+- **Branch from `main`, squash-merge back.** The PR title becomes the commit message, so write it as a [conventional commit](https://www.conventionalcommits.org/): `feat(domain): add Money`, `fix(sync): ...`, `docs: ...`, `chore(ci): ...`.
+- **Every PR names the ADR it implements.** The PR template asks for it. Reviews check the change against that ADR, not against general preference.
+- **The deferred list is binding (ADR-011).** Anything under "Not in V1" in the RFC needs a new ADR before it moves earlier. Open the ADR as its own PR first.
+- **Layers are rules, not suggestions.** Domain code imports no SQLAlchemy and does no I/O. Only the service layer opens a session or commits. Routers contain no business logic. Every state-changing UI action has a JSON twin.
+- **Money is an integer in minor units.** Floats never touch money, including at text boundaries (ADR-003).
+- **Both databases, always.** Stay inside the dialect-neutral subset (ADR-001). If something works on PostgreSQL only, it is a bug.
+- **Strict typing.** `mypy --strict` passes on `src` and `tests`. Relax a module only with a comment saying why.
+- **No real data.** Fixtures, screenshots, issues and CI logs use the canonical fictional workspace only.
+
+## Writing an ADR
+
+Copy `docs/adr/000-template.md` to the next number, fill in Context, Decision and Consequences, set Status to Proposed, and open a PR. The ADR is Accepted when that PR merges.
+
+## Releasing
+
+Versions come from git tags. Tagging `vX.Y.Z` on `main` publishes the PyPI package and the GHCR image (ADR-010). The release checklist lives in the RFC's Milestone 5 and includes a backup restore drill.
