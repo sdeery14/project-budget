@@ -56,10 +56,18 @@ def _sqlite_file_path(database: str | None) -> Path | None:
 
 
 def _prepare_sqlite_directory(path: Path) -> None:
-    """Create the data directory, private to the current user where the OS allows."""
+    """Create the data directory if missing, private to the current user where the OS allows.
+
+    Only directories this function creates are tightened. An existing directory, such
+    as the working directory behind a relative ``sqlite:///app.sqlite``, keeps its mode.
+    """
     directory = path.parent
+    if directory.exists():
+        return
+    created = [d for d in (directory, *directory.parents) if not d.exists()]
     directory.mkdir(parents=True, exist_ok=True)
-    _chmod_quietly(directory, stat.S_IRWXU)
+    for new_dir in created:
+        _chmod_quietly(new_dir, stat.S_IRWXU)
 
 
 class _SqliteConnectHook:

@@ -61,6 +61,22 @@ def test_sqlite_file_and_directory_are_private(tmp_path: Path) -> None:
         assert stat.S_IMODE(db_path.stat().st_mode) == 0o600
 
 
+def test_existing_directory_permissions_are_preserved(tmp_path: Path) -> None:
+    """A relative URL like sqlite:///app.sqlite must not chmod the working directory."""
+    existing = tmp_path / "shared"
+    existing.mkdir()
+    if sys.platform != "win32":
+        existing.chmod(0o755)
+    before = stat.S_IMODE(existing.stat().st_mode)
+    engine = make_engine(sqlite_url(existing / "pb.sqlite"))
+    try:
+        with engine.connect():
+            pass
+    finally:
+        engine.dispose()
+    assert stat.S_IMODE(existing.stat().st_mode) == before
+
+
 def test_in_memory_sqlite_needs_no_directory() -> None:
     engine = make_engine("sqlite+pysqlite:///:memory:")
     try:

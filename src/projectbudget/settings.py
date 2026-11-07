@@ -8,8 +8,9 @@ Every setting comes from the environment (prefix ``PROJECTBUDGET_``) or from a
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 DEFAULT_DATA_DIR = Path.home() / ".projectbudget"
 SQLITE_FILENAME = "projectbudget.sqlite"
@@ -36,15 +37,25 @@ class Settings(BaseSettings):
             "Only sqlite and postgresql backends are supported (ADR-001)."
         ),
     )
+    database_password: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Database password, kept out of database_url so it needs no URL-encoding "
+            "and can come from a secret store. Replaces any password in the URL."
+        ),
+    )
     host: str = Field(default="127.0.0.1", description="Interface the HTTP server binds to.")
     port: int = Field(default=8000, ge=1, le=65535, description="Port the HTTP server binds to.")
 
     @property
     def effective_database_url(self) -> str:
-        """The configured URL, or the default SQLite file inside ``data_dir``."""
-        if self.database_url:
+        """The configured URL with the separate password applied, or the default SQLite file."""
+        if not self.database_url:
+            return sqlite_url(self.data_dir / SQLITE_FILENAME)
+        if self.database_password is None:
             return self.database_url
-        return sqlite_url(self.data_dir / SQLITE_FILENAME)
+        url = make_url(self.database_url).set(password=self.database_password.get_secret_value())
+        return url.render_as_string(hide_password=False)
 
 
 def sqlite_url(path: Path) -> str:

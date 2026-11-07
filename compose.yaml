@@ -10,7 +10,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      PROJECTBUDGET_DATABASE_URL: postgresql+psycopg://projectbudget:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/projectbudget
+      # The password travels separately and is URL-encoded by the app, so any characters work.
+      PROJECTBUDGET_DATABASE_URL: postgresql+psycopg://projectbudget@db:5432/projectbudget
+      PROJECTBUDGET_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     depends_on:
       db:
         condition: service_healthy
