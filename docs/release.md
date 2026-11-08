@@ -32,7 +32,7 @@ Watch the Release workflow. If it fails before publishing, fix forward and re-ta
 ## After the release
 
 - [ ] `uvx projectbudget@X.Y.Z version` prints the version.
-- [ ] `docker run --rm ghcr.io/sdeery14/projectbudget:X.Y.Z projectbudget version` prints the version.
+- [ ] `docker run --rm --entrypoint projectbudget ghcr.io/sdeery14/projectbudget:X.Y.Z version` prints the version (the default entrypoint runs migrations and then the server, so the command must be swapped).
 - [ ] The GitHub Release shows the changelog notes and the two dist files.
 - [ ] Update `SECURITY.md` "Supported versions" if the supported line changed.
 - [ ] Open the next `## [Unreleased]` section in `CHANGELOG.md`.

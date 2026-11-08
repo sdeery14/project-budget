@@ -1,6 +1,9 @@
 """``projectbudget backup``: a consistent SQLite copy that opens and holds the data (RFC v3 §7)."""
 
+import os
 import sqlite3
+import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -70,3 +73,47 @@ def test_backup_command(
     again = runner.invoke(app, [*base, "backup", "--output", str(tmp_path / "b" / "manual.sqlite")])
     assert again.exit_code == 1
     assert "never overwritten" in again.output
+
+
+def test_backup_refuses_a_missing_source_instead_of_creating_an_empty_one(tmp_path: Path) -> None:
+    missing = tmp_path / "nope.sqlite"
+    with pytest.raises(backup.BackupError, match="No database at"):
+        backup.backup_sqlite(f"sqlite+pysqlite:///{missing.as_posix()}", tmp_path / "copy.sqlite")
+    assert not missing.exists()  # opening it would have created an empty database
+    assert not (tmp_path / "copy.sqlite").exists()
+
+
+@pytest.mark.parametrize("url", ["sqlite+pysqlite:///:memory:", "sqlite://"])
+def test_backup_refuses_in_memory_databases(url: str, tmp_path: Path) -> None:
+    with pytest.raises(backup.BackupError, match="in-memory"):
+        backup.backup_sqlite(url, tmp_path / "copy.sqlite")
+
+
+def test_backup_target_is_created_private_before_sqlite_writes_it(
+    session_factory: SessionFactory,
+    principal: Principal,
+    database_url: str,
+    backend: str,
+    tmp_path: Path,
+) -> None:
+    if backend != "sqlite":
+        pytest.skip("VACUUM INTO is SQLite only; PostgreSQL uses pg_dump")
+    target = tmp_path / "private.sqlite"
+    seen_modes: list[int] = []
+    real_open = os.open
+
+    def recording_open(path: str | bytes | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
+        if Path(os.fsdecode(path)) == target:
+            seen_modes.append(mode)
+            assert flags & os.O_EXCL, "the target must be created exclusively"
+        return real_open(path, flags, mode)
+
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(os, "open", recording_open)
+        backup.backup_sqlite(database_url, target)
+    assert seen_modes == [0o600]
+    if sys.platform != "win32":
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    # A pre-existing target, even an empty one, is refused: backups never overwrite.
+    with pytest.raises(backup.BackupError, match="never overwritten"):
+        backup.backup_sqlite(database_url, target)
