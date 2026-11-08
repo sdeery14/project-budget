@@ -442,3 +442,84 @@ def test_read_only_principals_can_preview_but_not_change(
         )
     with pytest.raises(ReadOnlyPrincipalError):
         sync.detach_source(session_factory, read_only_principal, source.id)
+
+
+def test_renaming_an_item_keeps_its_catalog_mapping_and_slug(
+    session_factory: SessionFactory, principal: Principal, source: SourceInfo, import_dir: Path
+) -> None:
+    sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    renamed = MANIFEST_V1.replace("name: 6 mm fuel line", "name: 6 mm copper fuel line")
+    result = sync.apply(
+        session_factory,
+        principal,
+        source.id,
+        import_dir=import_dir,
+        fetched=fetched(renamed),
+        now=NOW,
+    )
+    assert result.plan is not None
+    assert result.plan.creates == ()
+    (edit,) = result.plan.updates
+    assert [(c.field, c.new) for c in edit.item_changes] == [("name", "6 mm copper fuel line")]
+    fuel = catalog.get_item_by_slug(session_factory, principal, "6-mm-fuel-line")
+    assert fuel is not None
+    assert fuel.name == "6 mm copper fuel line"
+    assert catalog.get_item_by_slug(session_factory, principal, "6-mm-copper-fuel-line") is None
+    assert len(catalog.list_items(session_factory, principal)) == 2
+
+
+def test_two_ids_defining_one_new_slug_differently_apply_the_first_and_reject_the_second(
+    session_factory: SessionFactory, principal: Principal, source: SourceInfo, import_dir: Path
+) -> None:
+    text = """version: 1
+project: {id: diesel-heater, name: Diesel heater install}
+items:
+  - {id: a, name: Wire, qty: 3, unit: m}
+  - {id: b, name: Wire B, qty: 2, unit: ft, catalog: wire}
+"""
+    result = sync.apply(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=fetched(text), now=NOW
+    )
+    assert result.plan is not None
+    assert [c.external_id for c in result.plan.creates] == ["a"]
+    assert [r.external_id for r in result.plan.rejects] == ["b"]
+    wire = catalog.get_item_by_slug(session_factory, principal, "wire")
+    assert wire is not None
+    assert wire.unit == "m"
+    project_id = result.source.project_id or ""
+    assert len(requirements.list_requirements(session_factory, principal, project_id)) == 1
+
+
+def test_apply_rebuilds_the_plan_under_locks_so_ownership_cannot_change_in_between(
+    session_factory: SessionFactory, principal: Principal, source: SourceInfo, import_dir: Path
+) -> None:
+    sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    fuel = catalog.get_item_by_slug(session_factory, principal, "6-mm-fuel-line")
+    assert fuel is not None
+    changed = fetched(MANIFEST_V1.replace("unit: m", "unit: ft"))
+    shown = sync.preview(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=changed, now=NOW
+    )
+    assert shown.plan is not None
+    assert shown.plan.rejects == ()  # at preview time the source still owns the item
+    # Stock arrives between preview and apply: the item is now referenced elsewhere.
+    inventory.adjust(session_factory, principal, fuel.id, 2, note="found")
+    with pytest.raises(sync.PlanChangedError):
+        sync.apply(
+            session_factory,
+            principal,
+            source.id,
+            import_dir=import_dir,
+            fetched=changed,
+            expected_content_hash=changed.content_hash,
+            expected_plan_digest=shown.plan.digest,
+            now=NOW,
+        )
+    assert catalog.get_item(session_factory, principal, fuel.id).unit == "m"
+    # Without a human-approved preview, apply simply applies the plan that is true now.
+    result = sync.apply(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=changed, now=NOW
+    )
+    assert result.plan is not None
+    assert [r.external_id for r in result.plan.rejects] == ["fuel-line"]
+    assert catalog.get_item(session_factory, principal, fuel.id).unit == "m"

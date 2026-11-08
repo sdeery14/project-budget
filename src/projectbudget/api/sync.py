@@ -99,6 +99,7 @@ def apply(
         import_dir=app_settings(request).effective_sync_import_dir,
         fetched=_uploaded(body.manifest_text, "upload"),
         expected_content_hash=body.expected_content_hash,
+        expected_plan_digest=body.expected_plan_digest,
         force=body.force,
     )
     return SyncResultOut.of(result)

@@ -41,6 +41,7 @@ from projectbudget.services.requirements import (
 from projectbudget.services.sync import (
     InvalidSourceError,
     ManifestRejectedError,
+    PlanChangedError,
     SourceChangedError,
 )
 from projectbudget.services.transfer import ImportConflictError, WorkspaceNotEmptyError
@@ -80,6 +81,7 @@ CONFLICT_ERRORS: tuple[type[Exception], ...] = (
     PurchaseStateError,
     WorkspaceNotEmptyError,
     SourceChangedError,
+    PlanChangedError,
     SharedReusableConsumptionError,
     InsufficientOnHandError,
     OverConsumptionError,

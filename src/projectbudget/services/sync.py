@@ -12,9 +12,9 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import exists, func, select, update
+from sqlalchemy import CursorResult, exists, func, select, update
 from sqlalchemy.orm import Session
 
 from projectbudget.adapters import manifest as manifest_adapter
@@ -61,7 +61,12 @@ from projectbudget.persistence.models import (
 )
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services import workspace
-from projectbudget.services.catalog import CatalogItemCreate, find_live_by_slug, insert_item
+from projectbudget.services.catalog import (
+    CatalogItemCreate,
+    find_live_by_slug,
+    insert_item,
+    lock_item,
+)
 from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import NotFoundError, require_write
 
@@ -88,6 +93,10 @@ class ManifestRejectedError(ValueError):
 
 class SourceChangedError(ValueError):
     """The source content changed since the preview; look at the new plan before applying."""
+
+
+class PlanChangedError(ValueError):
+    """The workspace changed since the preview, so the plan would differ; preview again first."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -399,18 +408,9 @@ def _context(
         )
         for req, name in existing_rows
     )
-    catalog: dict[str, CatalogState] = {}
-    for item in manifest.items:
-        try:
-            slug = item.catalog or manifest_slug(item.name)
-        except ValueError:
-            continue
-        if slug in catalog:
-            continue
-        row = find_live_by_slug(db, slug)
-        if row is None:
-            continue
-        catalog[slug] = CatalogState(
+
+    def state_of(row: CatalogItem) -> CatalogState:
+        return CatalogState(
             id=row.id,
             slug=row.slug,
             name=row.name,
@@ -422,9 +422,74 @@ def _context(
             referenced_elsewhere=_referenced_elsewhere(db, row.id, source.id),
             manifest_estimate=_manifest_estimate(db, row.id, currency),
         )
+
+    catalog: dict[str, CatalogState] = {}
+    for item in manifest.items:
+        try:
+            slug = item.catalog or manifest_slug(item.name)
+        except ValueError:
+            continue
+        if slug in catalog:
+            continue
+        row = find_live_by_slug(db, slug)
+        if row is not None:
+            catalog[slug] = state_of(row)
+    items_by_id: dict[str, CatalogState] = {}
+    for req in existing:
+        if req.catalog_item_id in items_by_id:
+            continue
+        row = db.get(CatalogItem, req.catalog_item_id)
+        if row is not None:
+            items_by_id[req.catalog_item_id] = state_of(row)
     return SyncContext(
-        currency=currency, manifest=manifest, existing=existing, catalog=catalog, as_of=as_of
+        currency=currency,
+        manifest=manifest,
+        existing=existing,
+        catalog=catalog,
+        as_of=as_of,
+        items_by_id=items_by_id,
     )
+
+
+def _lock_source(db: Session, source_id: str) -> SyncSource:
+    """Serialise applies of one source (same device as ``catalog.lock_item``)."""
+    result = cast(
+        CursorResult[Any],
+        db.execute(
+            update(SyncSource)
+            .where(SyncSource.id == source_id)
+            .values(updated_at=SyncSource.updated_at)
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    if result.rowcount == 0:
+        raise SourceNotFoundError(source_id)
+    row = _load_source(db, source_id)
+    db.refresh(row)
+    return row
+
+
+def _lock_affected_items(db: Session, source: SyncSource, manifest: Manifest) -> None:
+    """Lock every catalog item the plan may read or write, in id order, before the plan is rebuilt.
+
+    Stock writers (adjust, consume, receive) take the same item lock, so nothing can be
+    referenced between the ownership check and the write.
+    """
+    item_ids = set(
+        db.scalars(
+            select(Requirement.catalog_item_id).where(Requirement.source_id == source.id)
+        ).all()
+    )
+    for item in manifest.items:
+        try:
+            slug = item.catalog or manifest_slug(item.name)
+        except ValueError:
+            continue
+        row = find_live_by_slug(db, slug)
+        if row is not None:
+            item_ids.add(row.id)
+    for item_id in sorted(item_ids):
+        lock_item(db, item_id)
 
 
 def manifest_slug(name: str) -> str:
@@ -631,11 +696,16 @@ def apply(
     import_dir: Path,
     fetched: FetchedManifest | None = None,
     expected_content_hash: str | None = None,
+    expected_plan_digest: str | None = None,
     force: bool = False,
     github: GitHubClient | None = None,
     now: datetime | None = None,
 ) -> SyncResult:
-    """Fetch, plan and apply in one transaction; the run is recorded as applied, noop or failed."""
+    """Fetch, plan and apply in one transaction; the run is recorded as applied, noop or failed.
+
+    ``expected_content_hash`` and ``expected_plan_digest`` come from the preview a person
+    approved: apply refuses when the content or the resulting plan is no longer that one.
+    """
     require_write(principal)
     moment = now or utcnow()
     shown = preview(
@@ -657,12 +727,21 @@ def apply(
     currency = workspace.get_currency(session_factory)
     try:
         with session_factory.begin() as db:
-            source = _load_source(db, source_id)
-            _apply(db, source, shown.manifest, shown.plan, currency, shown.fetched.as_of, moment)
+            # Lock the source and every item involved, then rebuild the plan from the state no
+            # one else can change any more. A plan computed before this transaction is only a
+            # preview; if a human approved that preview, it must still be the plan we apply.
+            source = _lock_source(db, source_id)
+            _lock_affected_items(db, source, shown.manifest)
+            plan = plan_sync(_context(db, source, shown.manifest, currency, shown.fetched.as_of))
+            if expected_plan_digest is not None and plan.digest != expected_plan_digest:
+                raise PlanChangedError(
+                    "The workspace changed since the preview and the plan would differ; preview again"
+                )
+            _apply(db, source, shown.manifest, plan, currency, shown.fetched.as_of, moment)
             source.last_revision = shown.fetched.revision
             source.last_content_hash = shown.fetched.content_hash
             source.updated_at = moment
-            summary = {**shown.plan.counts, "revision": shown.fetched.revision}
+            summary = {**plan.counts, "revision": shown.fetched.revision}
             run = _record_run(db, source, RunStatus.APPLIED, shown.fetched, summary, moment)
             info = _run_info(run)
             source_info = _source_info(source, _project_of(db, source.id))
@@ -677,4 +756,4 @@ def apply(
                 moment,
             )
         raise
-    return SyncResult(source=source_info, run=info, plan=shown.plan)
+    return SyncResult(source=source_info, run=info, plan=plan)

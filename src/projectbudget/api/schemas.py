@@ -742,6 +742,9 @@ class SyncApplyIn(SyncPreviewIn):
     expected_content_hash: str | None = Field(
         default=None, description="From the preview; apply refuses if the source changed since."
     )
+    expected_plan_digest: str | None = Field(
+        default=None, description="From the preview; apply refuses if the plan would differ now."
+    )
 
 
 class FieldChangeOut(BaseModel):
@@ -795,6 +798,7 @@ class SyncPlanOut(BaseModel):
     rejects: list[PlanRejectOut]
     estimate_rejects: list[PlanRejectOut]
     unchanged: list[str]
+    digest: str = Field(description="Pass back as expected_plan_digest when applying.")
 
     @classmethod
     def of(cls, plan: sync_domain.SyncPlan) -> "SyncPlanOut":
@@ -849,6 +853,7 @@ class SyncPlanOut(BaseModel):
                 for r in plan.estimate_rejects
             ],
             unchanged=list(plan.unchanged),
+            digest=plan.digest,
         )
 
 

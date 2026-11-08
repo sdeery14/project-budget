@@ -339,3 +339,71 @@ def test_counts_summarise_the_plan() -> None:
         "estimate_rejects": 0,
         "unchanged": 1,
     }
+
+
+def test_conflicting_definitions_of_one_new_slug_inside_a_manifest_reject_the_later_item() -> None:
+    plan = plan_sync(
+        ctx(
+            item("a", "Wire", 3, unit="m"),
+            item("b", "Copper", 2, unit="ft", catalog="wire"),
+            item("c", "Wire again", 1, unit="m", catalog="wire"),
+        )
+    )
+    assert [c.external_id for c in plan.creates] == [
+        "a",
+        "c",
+    ]  # same definition: both share the item
+    (reject,) = plan.rejects
+    assert reject.external_id == "b"
+    assert "conflicts with item 'a' in this manifest" in reject.reason
+    # The conflict is also caught against an item the source owns and is about to change.
+    owned = plan_sync(
+        ctx(
+            item("a", "Wire", 3, unit="ft"),
+            item("b", "Wire two", 1, unit="m", catalog="wire"),
+            existing_reqs=(existing("a", "Wire"),),
+            catalog={"wire": state("wire", "Wire", unit="m")},
+        )
+    )
+    assert [u.external_id for u in owned.updates] == ["a"]
+    assert [r.external_id for r in owned.rejects] == ["b"]
+
+
+def test_existing_requirements_keep_their_catalog_mapping_when_the_name_changes() -> None:
+    manifest = Manifest(
+        version=1,
+        project_id="shed",
+        project_name="Shed",
+        items=(item("w", "Copper Wire", 2, unit="m"),),
+    )
+    plan = plan_sync(
+        SyncContext(
+            currency="USD",
+            manifest=manifest,
+            existing=(existing("w", "Wire", 2, item_id="item-wire"),),
+            catalog={},  # "copper-wire" does not exist; the id's mapping decides, not the name
+            as_of=AS_OF,
+            items_by_id={"item-wire": state("wire", "Wire", unit="m")},
+        )
+    )
+    assert plan.creates == ()
+    (update,) = plan.updates
+    assert [(c.field, c.old, c.new) for c in update.item_changes] == [
+        ("name", "Wire", "Copper Wire")
+    ]
+    assert update.changes == ()
+    # A confirmed item keeps the owner's name and the rename is simply nothing to do.
+    confirmed = plan_sync(
+        SyncContext(
+            currency="USD",
+            manifest=manifest,
+            existing=(existing("w", "Wire", 2, item_id="item-wire"),),
+            catalog={},
+            as_of=AS_OF,
+            items_by_id={
+                "item-wire": state("wire", "Wire", unit="m", review_state=ReviewState.CONFIRMED)
+            },
+        )
+    )
+    assert confirmed.updates == ()
+    assert confirmed.unchanged == ("w",)

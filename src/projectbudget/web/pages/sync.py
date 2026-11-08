@@ -161,6 +161,7 @@ def apply(
     principal: Owner,
     source_id: str,
     expected_content_hash: Annotated[str, Form()] = "",
+    expected_plan_digest: Annotated[str, Form()] = "",
     content_b64: Annotated[str, Form()] = "",
     force: Annotated[bool, Form()] = False,
 ) -> Response:
@@ -172,6 +173,7 @@ def apply(
             import_dir=app_settings(request).effective_sync_import_dir,
             fetched=_from_b64(content_b64),
             expected_content_hash=expected_content_hash or None,
+            expected_plan_digest=expected_plan_digest or None,
             force=force,
         )
     except USER_ERRORS as exc:

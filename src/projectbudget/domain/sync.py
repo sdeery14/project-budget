@@ -11,8 +11,9 @@ still unreviewed and referenced by nothing else. The app owns intent, the
 catalog mapping, the sharing override, notes and sort order.
 """
 
+import hashlib
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from projectbudget.domain.catalog import (
@@ -76,8 +77,10 @@ class SyncContext:
     manifest: Manifest
     existing: tuple[ExistingRequirement, ...]
     catalog: Mapping[str, CatalogState]
-    """Live catalog items by slug (merge redirects already followed)."""
+    """Live catalog items by slug (merge redirects already followed), for items that are new here."""
     as_of: date
+    items_by_id: Mapping[str, CatalogState] = field(default_factory=dict)
+    """Live catalog items by id, for the requirements this source already has. Identity, not names."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +146,11 @@ class SyncPlan:
         return tuple(u for u in self.updates if u.reactivate)
 
     @property
+    def digest(self) -> str:
+        """A fingerprint of exactly what this plan would do; apply checks it against the preview."""
+        return hashlib.sha256(repr(self).encode("utf-8")).hexdigest()
+
+    @property
     def empty(self) -> bool:
         """Nothing to write: applying would change no row."""
         return not (self.creates or self.updates or self.archives)
@@ -201,17 +209,40 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
     rejects: list[Reject] = []
     estimate_rejects: list[Reject] = []
     unchanged: list[str] = []
+    # What each slug will look like once this plan applies: (kind, unit, external id that set it).
+    # A later item in the same manifest that disagrees is a conflict, never a silent reuse.
+    pending: dict[str, tuple[ItemKind, str, str]] = {}
 
     for item in manifest.items:
-        try:
-            slug = slug_for(item)
-        except ValueError as exc:
-            rejects.append(Reject(item.id, f"cannot derive a catalog slug from the name: {exc}"))
-            continue
-        state = ctx.catalog.get(slug)
+        existing = by_external.get(item.id)
+        if existing is not None and existing.catalog_item_id in ctx.items_by_id:
+            # An id we already know keeps its catalog mapping; its slug is immutable, so a
+            # rename changes the item's name, never which item it is.
+            state: CatalogState | None = ctx.items_by_id[existing.catalog_item_id]
+            slug = state.slug if state is not None else ""
+        else:
+            try:
+                slug = slug_for(item)
+            except ValueError as exc:
+                rejects.append(
+                    Reject(item.id, f"cannot derive a catalog slug from the name: {exc}")
+                )
+                continue
+            state = ctx.catalog.get(slug)
         estimate, estimate_problem = _resolve_estimate(item, ctx.currency)
         if estimate_problem is not None:
             estimate_rejects.append(Reject(item.id, estimate_problem))
+
+        claimed = pending.get(slug)
+        if claimed is not None and (claimed[0] is not item.kind or claimed[1] != item.unit):
+            rejects.append(
+                Reject(
+                    item.id,
+                    f"kind/unit ({item.kind.value}, {item.unit!r}) conflicts with item {claimed[2]!r} "
+                    f"in this manifest, which defines {slug!r} as ({claimed[0].value}, {claimed[1]!r})",
+                )
+            )
+            continue
 
         item_changes: tuple[FieldChange, ...] = ()
         if state is not None:
@@ -230,8 +261,11 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
             item_changes = differing if state.source_owned else ()
             if estimate is not None and state.manifest_estimate == estimate:
                 estimate = None  # already recorded at this amount by this source
+            effective = (item.kind, item.unit) if state.source_owned else (state.kind, state.unit)
+        else:
+            effective = (item.kind, item.unit)
+        pending.setdefault(slug, (effective[0], effective[1], item.id))
 
-        existing = by_external.get(item.id)
         if existing is None:
             rename = leaving.get(item.name.lower())
             creates.append(

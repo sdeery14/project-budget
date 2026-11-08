@@ -48,11 +48,17 @@ def test_sync_pages_end_to_end(logged_in: TestClient) -> None:
     assert "new unreviewed item" in shown.text
     assert "Apply this plan" in shown.text
     content_hash = shown.text.split('name="expected_content_hash" value="')[1].split('"')[0]
-    assert len(content_hash) == 64
+    plan_digest = shown.text.split('name="expected_plan_digest" value="')[1].split('"')[0]
+    assert len(content_hash) == len(plan_digest) == 64
 
     applied = logged_in.post(
         f"/sync/{source_id}/apply",
-        data={"csrf_token": csrf, "expected_content_hash": content_hash, "force": "true"},
+        data={
+            "csrf_token": csrf,
+            "expected_content_hash": content_hash,
+            "expected_plan_digest": plan_digest,
+            "force": "true",
+        },
     )
     assert applied.status_code == 200
     assert "Applied" in applied.text

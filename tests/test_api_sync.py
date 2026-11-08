@@ -56,7 +56,10 @@ def test_sources_preview_apply_runs_and_detach(logged_in: TestClient) -> None:
 
     applied = logged_in.post(
         f"/api/v1/sync/sources/{source['id']}/apply",
-        json={"expected_content_hash": body["content_hash"]},
+        json={
+            "expected_content_hash": body["content_hash"],
+            "expected_plan_digest": body["plan"]["digest"],
+        },
         headers=headers,
     )
     assert applied.status_code == 200, applied.text
@@ -88,6 +91,15 @@ def test_sources_preview_apply_runs_and_detach(logged_in: TestClient) -> None:
         headers=headers,
     )
     assert stale.status_code == 409
+    drifted = logged_in.post(
+        f"/api/v1/sync/sources/{source['id']}/apply",
+        json={
+            "manifest_text": MANIFEST.replace("qty: 100", "qty: 120"),
+            "expected_plan_digest": "0" * 64,
+        },
+        headers=headers,
+    )
+    assert drifted.status_code == 409
 
     rejected = logged_in.post(
         f"/api/v1/sync/sources/{source['id']}/preview",
