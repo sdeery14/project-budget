@@ -19,15 +19,18 @@ ProjectBudget consolidates the parts and tools your projects still need into one
 
 ```sh
 # Zero-infrastructure install, SQLite in ~/.projectbudget/
-uvx projectbudget init
-uvx projectbudget run
+uvx projectbudget init --username you   # creates the owner; prompts for a password
+uvx projectbudget run                   # then sign in at http://127.0.0.1:8000/login
 
 # Or a single container with SQLite on a volume
-docker run -p 8000:8000 -v projectbudget-data:/data ghcr.io/sdeery14/projectbudget
+docker run -d --name projectbudget -p 8000:8000 -v projectbudget-data:/data ghcr.io/sdeery14/projectbudget
+docker exec -it projectbudget projectbudget init --username you
 
 # Or try it with fictional data
 uvx projectbudget run --demo
 ```
+
+There are no default credentials: the app serves only `/health` until `init` has run. Behind a reverse proxy, terminate TLS there and pass the `Host` header through; the session cookie is `Secure` by default (`PROJECTBUDGET_SECURE_COOKIES=false` relaxes that for plain HTTP on a trusted network). API tokens for scripts are created on the **API tokens** page and sent as `Authorization: Bearer ...` to `/api/v1`.
 
 ## Roadmap
 

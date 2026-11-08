@@ -46,6 +46,19 @@ class Settings(BaseSettings):
     )
     host: str = Field(default="127.0.0.1", description="Interface the HTTP server binds to.")
     port: int = Field(default=8000, ge=1, le=65535, description="Port the HTTP server binds to.")
+    secure_cookies: bool = Field(
+        default=True,
+        description=(
+            "Mark the session cookie Secure so browsers send it only over HTTPS (ADR-005). "
+            "Browsers treat localhost as secure, so keep this on for local use; turn it off "
+            "only for plain HTTP on a trusted network."
+        ),
+    )
+    session_idle_timeout_minutes: int = Field(
+        default=7 * 24 * 60,
+        ge=1,
+        description="A login session ends after this long without a request.",
+    )
 
     @property
     def effective_database_url(self) -> str:

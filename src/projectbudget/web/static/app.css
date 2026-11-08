@@ -1,0 +1,87 @@
+/* ProjectBudget base stylesheet. No build step, no external fonts (CSP: style-src 'self'). */
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #1f2328;
+  --muted: #6b7280;
+  --border: #d9dde3;
+  --accent: #1f6feb;
+  --accent-text: #ffffff;
+  --danger: #b42318;
+  --success-bg: #e6f4ea;
+  --warning-bg: #fff4e5;
+  --error-bg: #fdecea;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --surface: #171a21;
+    --text: #e6e8eb;
+    --muted: #9aa3ad;
+    --border: #2b313b;
+    --accent: #4c8dff;
+    --accent-text: #0b0d11;
+    --danger: #ff7b72;
+    --success-bg: #12301c;
+    --warning-bg: #3a2a0b;
+    --error-bg: #3b1512;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; }
+pre { padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; }
+pre.secret { user-select: all; }
+
+.site-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.brand { font-weight: 700; text-decoration: none; color: var(--text); }
+.site-header nav { display: flex; align-items: center; gap: 1rem; }
+.site-footer { padding: 1rem; color: var(--muted); font-size: 0.875rem; text-align: center; }
+main { max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; }
+.card.narrow { max-width: 28rem; margin: 2rem auto; }
+h1 { font-size: 1.5rem; margin-top: 0; }
+
+form label { display: block; margin-top: 0.75rem; font-weight: 600; }
+form label.check { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 400; }
+input[type="text"], input[type="password"] {
+  width: 100%; padding: 0.5rem 0.6rem; margin-top: 0.25rem;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
+}
+button {
+  margin-top: 1rem; padding: 0.5rem 1rem; border: 1px solid transparent; border-radius: 6px;
+  background: var(--accent); color: var(--accent-text); font: inherit; cursor: pointer;
+}
+button.danger { background: transparent; color: var(--danger); border-color: var(--danger); margin: 0; }
+button.link { background: none; color: var(--accent); margin: 0; padding: 0; border: 0; text-decoration: underline; }
+form.inline { display: inline; }
+form.row { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin-bottom: 1.5rem; }
+form.row label { margin-top: 0; }
+form.row input[type="text"] { width: 16rem; }
+form.row button { margin-top: 0; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+th { color: var(--muted); font-weight: 600; font-size: 0.875rem; }
+.muted { color: var(--muted); }
+
+.alert { padding: 0.75rem 1rem; border-radius: 6px; border: 1px solid var(--border); }
+.alert.error { background: var(--error-bg); color: var(--danger); }
+.alert.warning { background: var(--warning-bg); }
+.alert.success { background: var(--success-bg); }
+.alert p { margin: 0 0 0.5rem; }
+
+/* HTMX indicator styles are not injected (CSP); define the one class used. */
+.htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }

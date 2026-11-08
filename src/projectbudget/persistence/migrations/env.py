@@ -2,6 +2,7 @@
 
 from alembic import context
 
+from projectbudget.persistence import models  # noqa: F401  (registers tables on Base)
 from projectbudget.persistence.base import Base
 from projectbudget.persistence.engine import make_engine
 

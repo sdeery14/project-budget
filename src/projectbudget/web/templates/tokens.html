@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}API tokens · ProjectBudget{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>API tokens</h1>
+  <p>Tokens authenticate scripts against <code>/api/v1</code> with an <code>Authorization: Bearer</code>
+  header. They are shown once and stored hashed. A read-only token cannot change anything, and no
+  token can create or revoke tokens; that happens only here.</p>
+
+  {% if issued %}
+  <div class="alert success" role="status">
+    <p><strong>Token “{{ issued.info.name }}” created.</strong> Copy it now; it will not be shown again.</p>
+    <pre class="secret">{{ issued.secret }}</pre>
+  </div>
+  {% endif %}
+  {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/settings/tokens" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" maxlength="100" placeholder="e.g. backup script" required>
+    <label class="check"><input type="checkbox" name="read_only" value="true"> Read-only</label>
+    <button type="submit">Create token</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Access</th><th>Created</th><th>Last used</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for token in tokens %}
+        {% include "partials/token_row.html" %}
+      {% else %}
+        <tr><td colspan="6" class="muted">No tokens yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
