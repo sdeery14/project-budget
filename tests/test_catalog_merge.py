@@ -88,7 +88,9 @@ def test_merge_repoints_everything_and_leaves_a_redirect(
     assert current is not None
     assert current.price == usd("0.40")  # the later as_of wins, whichever item it came from
     assert inventory.on_hand(session_factory, principal, keep.id) == 4
-    assert inventory.on_hand(session_factory, principal, dupe.id) == 0
+    assert (
+        inventory.on_hand(session_factory, principal, dupe.id) == 4
+    )  # the old id reads the survivor
     (purchase,) = purchases.list_purchases(session_factory, principal)
     assert purchase.lines[0].catalog_item_id == keep.id
 
@@ -193,3 +195,25 @@ def test_read_only_principals_cannot_merge(
     dupe, keep = pair
     with pytest.raises(ReadOnlyPrincipalError):
         catalog.merge_items(session_factory, read_only_principal, dupe.id, keep.id)
+
+
+def test_stock_operations_on_a_merged_id_land_on_the_survivor(
+    session_factory: SessionFactory,
+    principal: Principal,
+    pair: tuple[catalog.CatalogItemInfo, catalog.CatalogItemInfo],
+) -> None:
+    dupe, keep = pair
+    catalog.merge_items(session_factory, principal, dupe.id, keep.id)
+    moved = inventory.adjust(session_factory, principal, dupe.id, 3, note="found a box")
+    assert moved.catalog_item_id == keep.id
+    assert inventory.on_hand(session_factory, principal, keep.id) == 7
+    assert (
+        inventory.on_hand(session_factory, principal, dupe.id) == 7
+    )  # same stock, read either way
+    assert [m.id for m in inventory.list_movements(session_factory, principal, dupe.id)] == [
+        m.id for m in inventory.list_movements(session_factory, principal, keep.id)
+    ]
+    (row,) = backlog.get_backlog(session_factory, principal).rows
+    assert row.on_hand == 7
+    bought = purchases.mark_purchased(session_factory, principal, dupe.id, 1, usd("0.45"))
+    assert bought.lines[0].catalog_item_id == keep.id

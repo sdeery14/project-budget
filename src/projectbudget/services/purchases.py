@@ -10,8 +10,9 @@ received purchase cannot be cancelled.
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.orm import Session
 
 from projectbudget.domain.catalog import PurchaseStatus, validate_quantity
@@ -175,6 +176,30 @@ def _load_line(db: Session, line_id: str) -> PurchaseLine:
     return row
 
 
+def _lock_purchase(db: Session, purchase_id: str) -> Purchase:
+    """Take a write lock on the purchase row for the rest of the transaction, then load it fresh.
+
+    Every lifecycle change (status, lines, receipts) reads state and then writes, so two
+    concurrent changes to one purchase must queue here. Same device as ``catalog.lock_item``:
+    a no-op UPDATE that PostgreSQL holds until commit and SQLite turns into its write lock.
+    Taken before any item lock, so lock order is always purchase, then items.
+    """
+    result = cast(
+        CursorResult[Any],
+        db.execute(
+            update(Purchase)
+            .where(Purchase.id == purchase_id)
+            .values(updated_at=Purchase.updated_at)
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    if result.rowcount == 0:
+        raise PurchaseNotFoundError(purchase_id)
+    row = _load(db, purchase_id)
+    db.refresh(row)
+    return row
+
+
 def _clean_vendor(vendor: str) -> str:
     clean = " ".join(vendor.split())
     if len(clean) > VENDOR_MAX_LENGTH:
@@ -207,10 +232,13 @@ def _receive(
     db: Session, purchase: Purchase, line: PurchaseLine, qty: int, occurred_on: date, now: datetime
 ) -> None:
     wanted = validate_quantity(qty)
+    # The purchase row is already locked by the caller; lock the item, then re-read the line
+    # so the remaining quantity is the one no other receipt can still change.
+    lock_item(db, line.catalog_item_id)
+    db.refresh(line)
     remaining = line.qty - line.received_qty
     if wanted > remaining:
         raise InvalidPurchaseError(f"Only {remaining} of {line.qty} still to receive on this line")
-    lock_item(db, line.catalog_item_id)
     record_receipt(
         db,
         item_id=line.catalog_item_id,
@@ -320,7 +348,7 @@ def update_purchase(
     require_write(principal)
     vendor = _clean_vendor(command.vendor) if command.vendor is not None else None
     with session_factory.begin() as db:
-        purchase = _load(db, purchase_id)
+        purchase = _lock_purchase(db, purchase_id)
         if purchase.status == PurchaseStatus.CANCELLED.value:
             raise PurchaseStateError("Cannot edit a cancelled purchase")
         amounts = [a for a in (command.shipping, command.tax) if a is not None]
@@ -350,7 +378,7 @@ def add_line(
     require_write(principal)
     validate_quantity(command.qty)
     with session_factory.begin() as db:
-        purchase = _load(db, purchase_id)
+        purchase = _lock_purchase(db, purchase_id)
         _require_open(purchase, "add a line to")
         _check_amounts(purchase.currency, command.unit_price)
         item = load_live_item(db, command.catalog_item_id)
@@ -382,9 +410,10 @@ def remove_line(
     """Drop a line nothing has been received on. A purchase keeps at least one line."""
     require_write(principal)
     with session_factory.begin() as db:
-        purchase = _load(db, purchase_id)
+        purchase = _lock_purchase(db, purchase_id)
         _require_open(purchase, "remove a line from")
         line = _load_line(db, line_id)
+        db.refresh(line)
         if line.purchase_id != purchase.id:
             raise PurchaseLineNotFoundError(line_id)
         if line.received_qty:
@@ -412,7 +441,7 @@ def receive_line(
     moment = now or utcnow()
     with session_factory.begin() as db:
         line = _load_line(db, line_id)
-        purchase = _load(db, line.purchase_id)
+        purchase = _lock_purchase(db, line.purchase_id)
         _require_open(purchase, "receive on")
         _receive(db, purchase, line, qty, occurred_on or today(), moment)
         lines = _lines_of(db, purchase.id)
@@ -433,7 +462,7 @@ def receive_all(
     moment = now or utcnow()
     day = occurred_on or today()
     with session_factory.begin() as db:
-        purchase = _load(db, purchase_id)
+        purchase = _lock_purchase(db, purchase_id)
         _require_open(purchase, "receive")
         lines = _lines_of(db, purchase_id)
         for line in lines:
@@ -458,7 +487,7 @@ def set_status(
     if target is PurchaseStatus.RECEIVED:
         return receive_all(session_factory, principal, purchase_id, now=now)
     with session_factory.begin() as db:
-        purchase = _load(db, purchase_id)
+        purchase = _lock_purchase(db, purchase_id)
         lines = _lines_of(db, purchase_id)
         received_any = any(line.received_qty for line in lines)
         if purchase.status == PurchaseStatus.RECEIVED.value:

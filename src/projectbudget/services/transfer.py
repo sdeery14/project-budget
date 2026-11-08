@@ -50,6 +50,25 @@ WORKSPACE_TABLES = (
 """Every workspace table, children before parents."""
 
 
+def _between_reads(table: str) -> None:
+    """Test seam: called after each table is read during export, with the table's name."""
+
+
+def _begin_snapshot(db: Session) -> None:
+    """Make every read in this session see one consistent state of the database.
+
+    An export reads a dozen tables; a receipt committed between two of those reads
+    would leave a fully received line without its movement. PostgreSQL gets a
+    REPEATABLE READ transaction. SQLite's driver does not open a transaction for
+    reads, so an explicit BEGIN makes the first SELECT pin a WAL snapshot that the
+    rest of the reads share.
+    """
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+    else:
+        db.connection().exec_driver_sql("BEGIN")
+
+
 class WorkspaceNotEmptyError(ValueError):
     """Import into a workspace that already has data needs an explicit ``replace``."""
 
@@ -80,15 +99,23 @@ def export_workspace(
     """Read the whole workspace into the canonical document, every collection sorted by id."""
     currency = workspace.get_currency(session_factory)
     with session_factory() as db:
+        _begin_snapshot(db)
         projects = db.scalars(select(Project).order_by(Project.id)).all()
+        _between_reads("projects")
         items = db.scalars(select(CatalogItem).order_by(CatalogItem.id)).all()
+        _between_reads("catalog_items")
         requirements = db.scalars(select(Requirement).order_by(Requirement.id)).all()
+        _between_reads("requirements")
         estimates = db.scalars(select(PriceEstimate).order_by(PriceEstimate.id)).all()
+        _between_reads("price_estimates")
         movements = db.scalars(select(InventoryMovement).order_by(InventoryMovement.id)).all()
+        _between_reads("inventory_movements")
         purchases = db.scalars(select(Purchase).order_by(Purchase.id)).all()
+        _between_reads("purchases")
         lines = db.scalars(
             select(PurchaseLine).order_by(PurchaseLine.position, PurchaseLine.id)
         ).all()
+        _between_reads("purchase_lines")
         order = db.scalars(
             select(BacklogOrder.catalog_item_id).order_by(BacklogOrder.position)
         ).all()

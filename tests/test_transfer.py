@@ -1,6 +1,8 @@
 """Export and import of the whole workspace (ADR-008): round trip, ids, wipe, validation."""
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 
 import pytest
@@ -198,3 +200,52 @@ def test_read_only_principals_can_export_but_not_import_or_wipe(
         transfer.import_workspace(session_factory, read_only_principal, document)
     with pytest.raises(ReadOnlyPrincipalError):
         transfer.wipe_workspace(session_factory, read_only_principal)
+
+
+def test_export_reads_one_consistent_snapshot_while_stock_moves(
+    session_factory: SessionFactory,
+    principal: Principal,
+    canonical: CanonicalWorkspace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A receipt committed half-way through an export must not appear in some tables only."""
+    order = purchases.record_purchase(
+        session_factory,
+        principal,
+        purchases.PurchaseCreate(
+            lines=(purchases.PurchaseLineCreate(canonical.vise.id, 1, Money(8900, "USD")),),
+            status="ordered",  # type: ignore[arg-type]
+        ),
+    )
+    movements_read = threading.Event()
+    receipt_done = threading.Event()
+
+    def pause(table: str) -> None:
+        if table == "inventory_movements":
+            movements_read.set()
+            receipt_done.wait(timeout=10)
+
+    monkeypatch.setattr(transfer, "_between_reads", pause)
+
+    def receive() -> None:
+        movements_read.wait(timeout=10)
+        purchases.receive_line(session_factory, principal, order.lines[0].id, 1)
+        receipt_done.set()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        exporting = pool.submit(transfer.export_workspace, session_factory, principal, now=NOW)
+        receiving = pool.submit(receive)
+        document = exporting.result(timeout=30)
+        receiving.result(timeout=30)
+
+    line = next(
+        line for p in document.purchases for line in p.lines if line.id == order.lines[0].id
+    )
+    received_movements = [
+        m for m in document.inventory_movements if m.purchase_line_id == order.lines[0].id
+    ]
+    # Either the whole receipt is in the export or none of it; the line and its movement agree.
+    assert line.received_qty == sum(m.delta_qty for m in received_movements)
+    assert line.received_qty == 0  # the snapshot predates the receipt
+    # The database itself did take the receipt.
+    assert purchases.get_purchase(session_factory, principal, order.id).lines[0].received_qty == 1

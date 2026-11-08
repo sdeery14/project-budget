@@ -26,7 +26,7 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import InventoryMovement
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services.catalog import load_item, lock_item
+from projectbudget.services.catalog import load_live_item, lock_item
 from projectbudget.services.clock import today, utcnow
 from projectbudget.services.guards import require_write
 from projectbudget.services.requirements import load_requirement
@@ -186,13 +186,14 @@ def adjust(
         raise InvalidMovementError("An adjustment changes the count by a non-zero whole number")
     clean_note = _clean_note(note)
     with session_factory.begin() as db:
-        lock_item(db, item_id)  # serialises against concurrent adjustments and consumption
-        current = on_hand_in(db, item_id)
+        item = load_live_item(db, item_id)  # a merged id means the item it was merged into
+        lock_item(db, item.id)  # serialises against concurrent adjustments and consumption
+        current = on_hand_in(db, item.id)
         if current + delta < 0:
-            raise InsufficientOnHandError(item_id, current, -delta)
+            raise InsufficientOnHandError(item.id, current, -delta)
         row = _record(
             db,
-            item_id=item_id,
+            item_id=item.id,
             delta=delta,
             reason=MovementReason.ADJUSTMENT.value,
             requirement_id=None,
@@ -273,8 +274,7 @@ def record_receipt(
 
 def on_hand(session_factory: SessionFactory, principal: Principal, item_id: str) -> int:
     with session_factory() as db:
-        load_item(db, item_id)
-        return on_hand_in(db, item_id)
+        return on_hand_in(db, load_live_item(db, item_id).id)
 
 
 def consumed(session_factory: SessionFactory, principal: Principal, requirement_id: str) -> int:
@@ -288,10 +288,10 @@ def list_movements(
 ) -> list[MovementInfo]:
     """Newest first."""
     with session_factory() as db:
-        load_item(db, item_id)
+        live_id = load_live_item(db, item_id).id
         rows = db.scalars(
             select(InventoryMovement)
-            .where(InventoryMovement.catalog_item_id == item_id)
+            .where(InventoryMovement.catalog_item_id == live_id)
             .order_by(
                 InventoryMovement.occurred_on.desc(),
                 InventoryMovement.created_at.desc(),
