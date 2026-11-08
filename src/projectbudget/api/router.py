@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from projectbudget.domain.principal import AuthMethod, Principal
 from projectbudget.services import tokens
@@ -35,6 +35,8 @@ class IssuedTokenOut(TokenOut):
 
 
 class TokenCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     name: str = Field(min_length=1, max_length=tokens.TOKEN_NAME_MAX_LENGTH)
     read_only: bool = False
 
@@ -68,6 +70,8 @@ def create_token(request: Request, principal: Owner, body: TokenCreate) -> Issue
         )
     except tokens.TokenManagementRequiresSessionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except tokens.InvalidTokenNameError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return IssuedTokenOut(**_token_out(issued.info).model_dump(), token=issued.secret)
 
 

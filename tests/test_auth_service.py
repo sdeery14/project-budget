@@ -1,5 +1,6 @@
 """Owner, sessions and the database-backed login rate limit (ADR-005)."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 import pytest
@@ -13,6 +14,46 @@ from projectbudget.services import auth
 NOW = datetime(2026, 11, 7, 12, 0, 0)
 IDLE = timedelta(hours=1)
 KEYS = ["user:owner", "ip:203.0.113.9"]
+
+
+def _failures(session_factory: SessionFactory, key: str) -> int:
+    with session_factory() as db:
+        row = db.get(LoginAttempt, key)
+    assert row is not None, key
+    return row.failures
+
+
+def test_concurrent_failures_are_all_counted(
+    session_factory: SessionFactory, owner: auth.OwnerInfo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parallel attempts must not lose increments (the counter is one atomic UPDATE)."""
+    monkeypatch.setattr(auth, "LOGIN_MAX_FAILURES", 10_000)
+    attempts = 24
+
+    def attempt(_: int) -> auth.OwnerInfo | None:
+        return auth.authenticate(session_factory, OWNER_USERNAME, "wrong", limit_keys=KEYS, now=NOW)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(attempt, range(attempts)))
+    assert results == [None] * attempts
+    assert _failures(session_factory, "user:owner") == attempts
+    assert _failures(session_factory, "ip:203.0.113.9") == attempts
+
+
+def test_concurrent_first_failures_create_one_bucket(
+    session_factory: SessionFactory, owner: auth.OwnerInfo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The very first attempts race to create the rows; exactly one row per key must win."""
+    monkeypatch.setattr(auth, "LOGIN_MAX_FAILURES", 10_000)
+    keys = [f"user:race-{i % 3}" for i in range(12)]
+
+    def attempt(key: str) -> None:
+        auth.authenticate(session_factory, "nobody", "wrong", limit_keys=[key, "ip:race"], now=NOW)
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        list(pool.map(attempt, keys))
+    assert _failures(session_factory, "ip:race") == 12
+    assert [_failures(session_factory, f"user:race-{i}") for i in range(3)] == [4, 4, 4]
 
 
 def test_create_owner_normalizes_username_and_is_unique(session_factory: SessionFactory) -> None:

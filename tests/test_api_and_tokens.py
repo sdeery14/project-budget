@@ -69,8 +69,12 @@ def test_revoke_via_api_then_token_is_dead(logged_in: TestClient) -> None:
 
 def test_api_validates_input(logged_in: TestClient) -> None:
     csrf = csrf_token_from(logged_in.get("/").text)
-    response = logged_in.post("/api/v1/tokens", json={"name": ""}, headers={"X-CSRF-Token": csrf})
-    assert response.status_code == 422
+    for name in ("", "   ", "x" * 101):
+        response = logged_in.post(
+            "/api/v1/tokens", json={"name": name}, headers={"X-CSRF-Token": csrf}
+        )
+        assert response.status_code == 422, (name, response.status_code)
+    assert logged_in.get("/api/v1/tokens").json() == []
 
 
 def test_openapi_is_behind_auth_and_swagger_is_off(logged_in: TestClient) -> None:

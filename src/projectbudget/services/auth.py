@@ -12,7 +12,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import DateTime, case, delete, literal, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from projectbudget.domain.principal import Principal
@@ -131,20 +132,22 @@ def authenticate(
     a failure counts against every bucket; a success clears them.
     """
     moment = now or utcnow()
+    keys = sorted(set(limit_keys))
     try:
         name: str | None = normalize_username(username)
     except InvalidUsernameError:
         name = None
+    _ensure_buckets(session_factory, keys, moment)
     with session_factory.begin() as db:
-        _raise_if_locked(db, limit_keys, moment)
+        _raise_if_locked(db, keys, moment)
         owner = db.scalar(select(Owner).where(Owner.username == name)) if name is not None else None
         verified = passwords.verify_or_burn(owner.password_hash if owner else None, password)
         if owner is not None and verified:
-            db.execute(delete(LoginAttempt).where(LoginAttempt.key.in_(list(limit_keys))))
+            db.execute(delete(LoginAttempt).where(LoginAttempt.key.in_(keys)))
             if passwords.needs_rehash(owner.password_hash):
                 owner.password_hash = passwords.hash_password(password)
             return OwnerInfo(id=owner.id, username=owner.username)
-        _record_failure(db, limit_keys, moment)
+        _record_failure(db, keys, moment)
         return None
 
 
@@ -155,18 +158,50 @@ def _raise_if_locked(db: Session, keys: Sequence[str], now: datetime) -> None:
         raise LoginLockedError(max(locked) - now)
 
 
-def _record_failure(db: Session, keys: Sequence[str], now: datetime) -> None:
+def _ensure_buckets(session_factory: SessionFactory, keys: Sequence[str], now: datetime) -> None:
+    """Make sure a bucket row exists for every key, each in its own short transaction.
+
+    Two concurrent attempts may both try to create the same row; the loser's
+    IntegrityError rolls back only this small transaction and the row it wanted
+    is there. Afterwards the main transaction only ever runs atomic UPDATEs.
+    """
     for key in keys:
-        row = db.get(LoginAttempt, key)
-        if row is None:
-            row = LoginAttempt(key=key, failures=0, window_started_at=now, locked_until=None)
-            db.add(row)
-        elif row.window_started_at + LOGIN_WINDOW <= now:
-            row.failures = 0
-            row.window_started_at = now
-        row.failures += 1
-        if row.failures >= LOGIN_MAX_FAILURES:
-            row.locked_until = now + LOGIN_LOCKOUT
+        try:
+            with session_factory.begin() as db:
+                if db.get(LoginAttempt, key) is None:
+                    db.add(
+                        LoginAttempt(key=key, failures=0, window_started_at=now, locked_until=None)
+                    )
+        except IntegrityError:
+            pass
+
+
+def _record_failure(db: Session, keys: Sequence[str], now: datetime) -> None:
+    """Count one failure per bucket in a single UPDATE each, so parallel attempts never lose one.
+
+    Every expression reads the row as it was before this statement, on both
+    backends, so the window reset, the increment and the lock decision are one
+    atomic step. Keys are updated in sorted order so two attempts never lock the
+    same rows in opposite orders.
+    """
+    window_expired = LoginAttempt.window_started_at <= literal(now - LOGIN_WINDOW, DateTime())
+    new_failures = case((window_expired, 1), else_=LoginAttempt.failures + 1)
+    for key in sorted(keys):
+        db.execute(
+            update(LoginAttempt)
+            .where(LoginAttempt.key == key)
+            .values(
+                failures=new_failures,
+                window_started_at=case(
+                    (window_expired, literal(now, DateTime())),
+                    else_=LoginAttempt.window_started_at,
+                ),
+                locked_until=case(
+                    (new_failures >= LOGIN_MAX_FAILURES, literal(now + LOGIN_LOCKOUT, DateTime())),
+                    else_=LoginAttempt.locked_until,
+                ),
+            )
+        )
 
 
 # --- sessions ----------------------------------------------------------------------
