@@ -24,6 +24,9 @@ from projectbudget.services.guards import ReadOnlyPrincipalError
 from projectbudget.services.sync import SourceInfo
 
 NOW = datetime(2026, 11, 8, 9, 0, 0)
+LATER = datetime(
+    2026, 11, 8, 9, 5, 0
+)  # runs are listed newest first; equal timestamps have no order
 AS_OF = date(2026, 11, 1)
 
 MANIFEST_V1 = """version: 1
@@ -192,7 +195,7 @@ def test_same_content_is_a_noop_and_a_forced_rerun_has_an_empty_plan(
     session_factory: SessionFactory, principal: Principal, source: SourceInfo, import_dir: Path
 ) -> None:
     sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
-    again = sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    again = sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=LATER)
     assert again.noop
     assert again.run.status is RunStatus.NOOP
     forced = sync.preview(
