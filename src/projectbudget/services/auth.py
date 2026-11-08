@@ -89,6 +89,19 @@ def normalize_username(username: str) -> str:
 # --- owner -------------------------------------------------------------------------
 
 
+class NoOwnerError(Exception):
+    """``projectbudget init`` has not been run."""
+
+
+def owner_principal(session_factory: SessionFactory) -> Principal:
+    """The owner acting locally (CLI): full access, as from a browser session."""
+    with session_factory() as db:
+        owner = db.scalar(select(Owner).limit(1))
+    if owner is None:
+        raise NoOwnerError("No owner yet; run `projectbudget init` first")
+    return Principal(owner_id=owner.id, username=owner.username, auth="session")
+
+
 def owner_exists(session_factory: SessionFactory) -> bool:
     with session_factory() as db:
         return db.scalar(select(Owner.id).limit(1)) is not None

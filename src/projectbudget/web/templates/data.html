@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Export and import · ProjectBudget{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Export and import</h1>
+  <p class="muted">One JSON file holds the whole workspace: projects, catalog, requirements, prices, stock
+  movements, purchases, the budget plan and the backlog order. Use it as a backup, to move between SQLite
+  and PostgreSQL, or to seed a demo. Your login and API tokens are not part of it.</p>
+  {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+  {% if summary %}
+  <div class="alert success" role="status">
+    <p><strong>Import complete{% if summary.replaced %} (previous data replaced){% endif %}.</strong></p>
+    <p>{{ summary.projects }} projects, {{ summary.catalog_items }} catalog items, {{ summary.requirements }} requirements,
+    {{ summary.price_estimates }} price estimates, {{ summary.inventory_movements }} stock movements,
+    {{ summary.purchases }} purchases with {{ summary.purchase_lines }} lines{% if summary.budget_plan %}, and the budget plan{% endif %}.
+    <a href="/backlog">See the backlog</a>.</p>
+  </div>
+  {% endif %}
+
+  <h2>Export</h2>
+  <p><a href="/settings/data/export.json" download="projectbudget-export.json">Download the workspace as JSON</a>.
+  The same document is served at <code>/api/v1/export</code>.</p>
+
+  <h2>Import</h2>
+  <form method="post" action="/settings/data/import" enctype="multipart/form-data" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grow"><label for="file">Export file</label>
+      <input id="file" name="file" type="file" accept="application/json,.json" required></div>
+    <label class="check"><input type="checkbox" name="replace" value="true"> Replace everything already in this workspace</label>
+    <button type="submit" class="danger">Import</button>
+  </form>
+  <p class="muted">Import into an empty workspace needs no confirmation. With data present it refuses unless you
+  tick "replace", which deletes every current project, item, requirement, price, movement, purchase and the plan first.
+  Every id in the file is kept, so backlog and timeline come back exactly as they were.</p>
+</section>
+{% endblock %}

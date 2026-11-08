@@ -1,22 +1,24 @@
-"""``projectbudget`` CLI: ``init``, ``run``, ``db upgrade|downgrade|current|revision``, ``version``.
+"""``projectbudget`` CLI: ``init``, ``run``, ``export``, ``import``, ``db ...``, ``version``.
 
-``export``, ``import`` and ``sync`` arrive with their milestones.
+``sync`` arrives with Milestone 4.
 The container entrypoint runs ``db upgrade`` and then ``run`` (ADR-010).
 """
 
 import os
 import sys
+from pathlib import Path
 from typing import Annotated
 
 import typer
 import uvicorn
 
 from projectbudget import __version__
+from projectbudget.adapters.export_format import InvalidDocumentError, parse_document
 from projectbudget.domain.money import InvalidCurrencyError, validate_currency
 from projectbudget.persistence import migrate
 from projectbudget.persistence.engine import UnsupportedDatabaseError, backend_name, make_engine
 from projectbudget.persistence.session import make_session_factory
-from projectbudget.services import auth, passwords, workspace
+from projectbudget.services import auth, passwords, transfer, workspace
 from projectbudget.settings import Settings
 
 app = typer.Typer(
@@ -116,6 +118,72 @@ def init(
     typer.echo(
         f"Start the app with `projectbudget run` and sign in at "
         f"http://{settings.host}:{settings.port}/login"
+    )
+
+
+@app.command("export")
+def export_cmd(
+    ctx: typer.Context,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Write here instead of standard output."),
+    ] = None,
+) -> None:
+    """Write the whole workspace as the canonical JSON document (ADR-008)."""
+    url = _settings(ctx).effective_database_url
+    engine = make_engine(url)
+    try:
+        factory = make_session_factory(engine)
+        try:
+            principal = auth.owner_principal(factory)
+        except auth.NoOwnerError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+        text = transfer.export_workspace(factory, principal).to_json()
+    finally:
+        engine.dispose()
+    if output is None:
+        sys.stdout.write(text)
+    else:
+        output.write_text(text, encoding="utf-8")
+        typer.echo(f"Exported workspace to {output}")
+
+
+@app.command("import")
+def import_cmd(
+    ctx: typer.Context,
+    path: Annotated[Path, typer.Argument(help="An export written by `projectbudget export`.")],
+    replace: Annotated[
+        bool,
+        typer.Option("--replace", help="Delete the current workspace data first."),
+    ] = False,
+) -> None:
+    """Load an export into this workspace, keeping every id (ADR-008)."""
+    url = _settings(ctx).effective_database_url
+    try:
+        document = parse_document(path.read_bytes())
+    except (OSError, InvalidDocumentError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="PATH") from exc
+    engine = make_engine(url)
+    try:
+        factory = make_session_factory(engine)
+        try:
+            principal = auth.owner_principal(factory)
+            summary = transfer.import_workspace(factory, principal, document, replace=replace)
+        except auth.NoOwnerError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+        except transfer.WorkspaceNotEmptyError as exc:
+            typer.echo(f"{exc}. Use --replace to overwrite it.", err=True)
+            raise typer.Exit(code=1) from exc
+        except transfer.ImportConflictError as exc:
+            raise typer.BadParameter(str(exc), param_hint="PATH") from exc
+    finally:
+        engine.dispose()
+    typer.echo(
+        f"Imported {summary.projects} projects, {summary.catalog_items} catalog items, "
+        f"{summary.requirements} requirements, {summary.purchases} purchases"
+        f"{' (previous data replaced)' if summary.replaced else ''}."
     )
 
 

@@ -1,7 +1,8 @@
 """The RFC v3 §4 invariants that PR4a can already prove, each as a named test on both backends.
 
-Still to come with their PRs: catalog merge (PR6), sync no-op and
-archive-on-missing (sync PRs). Foreign-key enforcement lives in test_engine.py.
+Still to come with the sync PRs: same content hash is a no-op, a missing manifest
+entry archives. Foreign-key enforcement lives in test_engine.py; the merge invariant is
+proved in test_catalog_merge.py.
 """
 
 import uuid

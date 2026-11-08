@@ -27,6 +27,7 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.money import CurrencyMismatchError, Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import (
+    BacklogOrder,
     CatalogItem,
     InventoryMovement,
     PriceEstimate,
@@ -51,6 +52,19 @@ class SlugTakenError(ValueError):
 
 class NegativeEstimateError(ValueError):
     """A price estimate is never below zero."""
+
+
+class MergeError(ValueError):
+    """Items cannot be merged: same item, different unit or kind, or already merged."""
+
+
+class MergedItemError(ValueError):
+    """A merged item is a redirect; edit the item it points to instead."""
+
+    def __init__(self, item_id: str, target_id: str) -> None:
+        super().__init__(f"Catalog item {item_id!r} was merged into {target_id!r}")
+        self.item_id = item_id
+        self.target_id = target_id
 
 
 class UnitInUseError(ValueError):
@@ -78,8 +92,13 @@ class CatalogItemInfo:
     kind: ItemKind
     unit: str
     review_state: ReviewState
+    merged_into_id: str | None
     created_at: datetime
     updated_at: datetime
+
+    @property
+    def merged(self) -> bool:
+        return self.merged_into_id is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +147,7 @@ def _item_info(row: CatalogItem) -> CatalogItemInfo:
         kind=ItemKind(row.kind),
         unit=row.unit,
         review_state=ReviewState(row.review_state),
+        merged_into_id=row.merged_into_id,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -155,6 +175,29 @@ def load_item(db: Session, item_id: str) -> CatalogItem:
 
 def find_by_slug(db: Session, slug: str) -> CatalogItem | None:
     return db.scalar(select(CatalogItem).where(CatalogItem.slug == slug))
+
+
+def resolve_live(db: Session, row: CatalogItem) -> CatalogItem:
+    """Follow merge redirects to the item that is actually in use."""
+    seen = {row.id}
+    while row.merged_into_id is not None:
+        target = db.get(CatalogItem, row.merged_into_id)
+        if target is None or target.id in seen:
+            return row
+        seen.add(target.id)
+        row = target
+    return row
+
+
+def load_live_item(db: Session, item_id: str) -> CatalogItem:
+    """Fetch an item by id, following merge redirects (an old id keeps working)."""
+    return resolve_live(db, load_item(db, item_id))
+
+
+def find_live_by_slug(db: Session, slug: str) -> CatalogItem | None:
+    """Fetch an item by slug, following merge redirects (an old manifest slug keeps working)."""
+    row = find_by_slug(db, slug)
+    return resolve_live(db, row) if row is not None else None
 
 
 def _is_referenced(db: Session, item_id: str) -> bool:
@@ -222,7 +265,7 @@ def find_or_create_from_text(
 ) -> CatalogItem:
     """Resolve free text to the item with that slug, creating an unreviewed consumable if needed."""
     name = validate_name(text)
-    existing = find_by_slug(db, slugify(name))
+    existing = find_live_by_slug(db, slugify(name))
     if existing is not None:
         return existing
     command = CatalogItemCreate(
@@ -259,6 +302,8 @@ def update_item(
     unit = validate_unit(command.unit) if command.unit is not None else None
     with session_factory.begin() as db:
         row = lock_item(db, item_id) if unit is not None else load_item(db, item_id)
+        if row.merged_into_id is not None:
+            raise MergedItemError(row.id, row.merged_into_id)
         if name is not None:
             row.name = name
         if command.kind is not None:
@@ -284,14 +329,72 @@ def get_item_by_slug(
     session_factory: SessionFactory, principal: Principal, slug: str
 ) -> CatalogItemInfo | None:
     with session_factory() as db:
-        row = find_by_slug(db, slug)
+        row = find_live_by_slug(db, slug)
         return _item_info(row) if row is not None else None
 
 
-def list_items(session_factory: SessionFactory, principal: Principal) -> list[CatalogItemInfo]:
+def list_items(
+    session_factory: SessionFactory, principal: Principal, *, include_merged: bool = False
+) -> list[CatalogItemInfo]:
+    query = select(CatalogItem).order_by(CatalogItem.name, CatalogItem.id)
+    if not include_merged:
+        query = query.where(CatalogItem.merged_into_id.is_(None))
     with session_factory() as db:
-        rows = db.scalars(select(CatalogItem).order_by(CatalogItem.name, CatalogItem.id)).all()
-        return [_item_info(row) for row in rows]
+        return [_item_info(row) for row in db.scalars(query).all()]
+
+
+def merge_items(
+    session_factory: SessionFactory,
+    principal: Principal,
+    source_id: str,
+    target_id: str,
+    *,
+    now: datetime | None = None,
+) -> CatalogItemInfo:
+    """Fold ``source`` into ``target``: every reference moves in one transaction and a redirect stays.
+
+    Requirements, purchase lines, inventory movements and price estimates are re-pointed;
+    the source keeps its slug and ``merged_into_id`` so old ids and manifest slugs still
+    resolve. Units and kinds must match: quantities are in the unit, and consolidation
+    rules differ by kind.
+    """
+    require_write(principal)
+    if source_id == target_id:
+        raise MergeError("An item cannot be merged into itself")
+    moment = now or utcnow()
+    with session_factory.begin() as db:
+        for item_id in sorted((source_id, target_id)):
+            lock_item(db, item_id)
+        source, target = load_item(db, source_id), load_item(db, target_id)
+        if source.merged_into_id is not None:
+            raise MergedItemError(source.id, source.merged_into_id)
+        if target.merged_into_id is not None:
+            raise MergedItemError(target.id, target.merged_into_id)
+        if source.unit != target.unit:
+            raise MergeError(
+                f"Units differ ({source.unit!r} vs {target.unit!r}); nothing is converted"
+            )
+        if source.kind != target.kind:
+            raise MergeError(f"Kinds differ ({source.kind} vs {target.kind})")
+        for table in (Requirement, PurchaseLine, InventoryMovement, PriceEstimate):
+            db.execute(
+                update(table)
+                .where(table.catalog_item_id == source.id)
+                .values(catalog_item_id=target.id)
+                .execution_options(synchronize_session=False)
+            )
+        source_order = db.get(BacklogOrder, source.id)
+        if source_order is not None:
+            if db.get(BacklogOrder, target.id) is None:
+                db.add(BacklogOrder(catalog_item_id=target.id, position=source_order.position))
+            db.delete(source_order)
+        source.merged_into_id = target.id
+        source.updated_at = moment
+        if source.review_state == ReviewState.CONFIRMED.value:
+            target.review_state = ReviewState.CONFIRMED.value
+        target.updated_at = moment
+        db.flush()
+        return _item_info(target)
 
 
 # --- price estimates ---------------------------------------------------------------
@@ -314,10 +417,10 @@ def add_estimate(
         raise NegativeEstimateError(f"Estimate {command.price} is below zero")
     moment = now or utcnow()
     with session_factory.begin() as db:
-        load_item(db, item_id)
+        item = load_live_item(db, item_id)
         row = PriceEstimate(
             id=str(uuid.uuid4()),
-            catalog_item_id=item_id,
+            catalog_item_id=item.id,
             amount=command.price.amount,
             currency=command.price.currency,
             as_of=command.as_of or today(),

@@ -39,6 +39,7 @@ from projectbudget.services.inventory import MovementInfo
 from projectbudget.services.projects import ProjectInfo
 from projectbudget.services.purchases import PurchaseInfo, PurchaseLineInfo
 from projectbudget.services.requirements import RequirementInfo
+from projectbudget.services.transfer import ImportSummary
 
 
 class Stripped(BaseModel):
@@ -114,6 +115,7 @@ class CatalogItemOut(BaseModel):
     kind: ItemKind
     unit: str
     review_state: ReviewState
+    merged_into_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -126,6 +128,7 @@ class CatalogItemOut(BaseModel):
             kind=info.kind,
             unit=info.unit,
             review_state=info.review_state,
+            merged_into_id=info.merged_into_id,
             created_at=info.created_at,
             updated_at=info.updated_at,
         )
@@ -402,6 +405,59 @@ class PurchaseIn(Stripped):
     shipping: StrictStr | None = None
     tax: StrictStr | None = None
     notes: str = ""
+
+
+class PurchasePatch(Stripped):
+    vendor: str | None = None
+    ordered_on: date | None = None
+    shipping: StrictStr | None = None
+    tax: StrictStr | None = None
+    notes: str | None = None
+
+
+class PurchaseStatusIn(Stripped):
+    status: PurchaseStatus
+
+
+class ReceiveIn(Stripped):
+    occurred_on: date | None = None
+
+
+class ReceiveLineIn(Stripped):
+    qty: int
+    occurred_on: date | None = None
+
+
+class MergeIn(Stripped):
+    target_id: str = Field(
+        description="The item that survives; this item becomes a redirect to it."
+    )
+
+
+class ImportSummaryOut(BaseModel):
+    projects: int
+    catalog_items: int
+    requirements: int
+    price_estimates: int
+    inventory_movements: int
+    purchases: int
+    purchase_lines: int
+    budget_plan: bool
+    replaced: bool
+
+    @classmethod
+    def of(cls, summary: ImportSummary) -> "ImportSummaryOut":
+        return cls(
+            projects=summary.projects,
+            catalog_items=summary.catalog_items,
+            requirements=summary.requirements,
+            price_estimates=summary.price_estimates,
+            inventory_movements=summary.inventory_movements,
+            purchases=summary.purchases,
+            purchase_lines=summary.purchase_lines,
+            budget_plan=summary.budget_plan,
+            replaced=summary.replaced,
+        )
 
 
 class MarkPurchasedIn(Stripped):

@@ -1,0 +1,221 @@
+{
+  "backlog_order": [],
+  "budget_plan": {
+    "balance_as_of": "2026-11-01",
+    "contingency_pct": 10,
+    "earmarked_funds_minor": 15000,
+    "horizon_months": 12,
+    "monthly_contribution_minor": 2500,
+    "overrides": [],
+    "protected_reserve_minor": 8000,
+    "updated_at": "2026-11-08T09:00:00"
+  },
+  "catalog_items": [
+    {
+      "created_at": "2026-11-08T09:00:00",
+      "id": "2f742662-13ec-4888-a422-e8321de4664d",
+      "kind": "reusable",
+      "merged_into_id": null,
+      "name": "Bar clamp 600 mm",
+      "review_state": "confirmed",
+      "slug": "bar-clamp-600",
+      "unit": "each",
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "created_at": "2026-11-08T09:00:00",
+      "id": "58364fa8-38f2-4365-af9d-9bd2a7df9310",
+      "kind": "consumable",
+      "merged_into_id": null,
+      "name": "M8 carriage bolt 80 mm",
+      "review_state": "confirmed",
+      "slug": "m8-carriage-bolt-80",
+      "unit": "each",
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "created_at": "2026-11-08T09:00:00",
+      "id": "ad6487b2-f91b-4ee5-8ae1-115179f687d8",
+      "kind": "reusable",
+      "merged_into_id": null,
+      "name": "Bench vise 125 mm",
+      "review_state": "confirmed",
+      "slug": "bench-vise-125",
+      "unit": "each",
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "created_at": "2026-11-08T09:00:00",
+      "id": "ede68b60-316c-446b-a3f1-2b49c45eb571",
+      "kind": "consumable",
+      "merged_into_id": null,
+      "name": "Gate hinge set",
+      "review_state": "confirmed",
+      "slug": "gate-hinge-set",
+      "unit": "set",
+      "updated_at": "2026-11-08T09:00:00"
+    }
+  ],
+  "currency": "USD",
+  "exported_at": "2026-11-08T09:00:00",
+  "format": "projectbudget-workspace",
+  "inventory_movements": [
+    {
+      "catalog_item_id": "2f742662-13ec-4888-a422-e8321de4664d",
+      "created_at": "2026-11-08T09:00:00",
+      "delta_qty": 1,
+      "id": "206d404a-3015-49a7-84fd-740644a52c62",
+      "note": "Stock take",
+      "occurred_on": "2026-11-01",
+      "purchase_line_id": null,
+      "reason": "adjustment",
+      "requirement_id": null
+    },
+    {
+      "catalog_item_id": "58364fa8-38f2-4365-af9d-9bd2a7df9310",
+      "created_at": "2026-11-08T09:00:00",
+      "delta_qty": 4,
+      "id": "7e693f6c-24b8-4647-aed2-4d8a3a2fc085",
+      "note": "Stock take",
+      "occurred_on": "2026-11-01",
+      "purchase_line_id": null,
+      "reason": "adjustment",
+      "requirement_id": null
+    }
+  ],
+  "price_estimates": [
+    {
+      "amount_minor": 45,
+      "as_of": "2026-11-01",
+      "catalog_item_id": "58364fa8-38f2-4365-af9d-9bd2a7df9310",
+      "confidence": "medium",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "5f4aab8e-27b2-48f2-b27a-c7e14586cd80",
+      "origin": "manual"
+    },
+    {
+      "amount_minor": 8900,
+      "as_of": "2026-11-01",
+      "catalog_item_id": "ad6487b2-f91b-4ee5-8ae1-115179f687d8",
+      "confidence": "low",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "825dd3d5-cf55-4cbf-8c35-e63838a02cfd",
+      "origin": "manual"
+    },
+    {
+      "amount_minor": 1250,
+      "as_of": "2026-11-01",
+      "catalog_item_id": "2f742662-13ec-4888-a422-e8321de4664d",
+      "confidence": "high",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "e9cb3a26-93c6-4023-9701-f138d4d0e239",
+      "origin": "manual"
+    }
+  ],
+  "projects": [
+    {
+      "archived": false,
+      "created_at": "2026-11-08T09:00:00",
+      "id": "68a04deb-fa26-482e-a5c7-5b99a484fd6c",
+      "name": "Garden gate",
+      "notes": "Replace the rotten side gate.",
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "archived": false,
+      "created_at": "2026-11-08T09:00:00",
+      "id": "7a3e28da-0d85-4db3-9c97-439213876d2c",
+      "name": "Workbench",
+      "notes": "A sturdy bench for the garage.",
+      "updated_at": "2026-11-08T09:00:00"
+    }
+  ],
+  "purchases": [],
+  "requirements": [
+    {
+      "archive_reason": null,
+      "catalog_item_id": "ede68b60-316c-446b-a3f1-2b49c45eb571",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "0fee0dc7-a593-4b4a-937d-90cb178bfc84",
+      "intent": "active",
+      "notes": "",
+      "priority": 1,
+      "project_id": "68a04deb-fa26-482e-a5c7-5b99a484fd6c",
+      "qty": 1,
+      "sharing": "shared",
+      "sort_order": 2,
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "archive_reason": null,
+      "catalog_item_id": "2f742662-13ec-4888-a422-e8321de4664d",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "281c1f79-1e6f-49b8-8e39-6376a0f7fdf1",
+      "intent": "active",
+      "notes": "",
+      "priority": 2,
+      "project_id": "7a3e28da-0d85-4db3-9c97-439213876d2c",
+      "qty": 3,
+      "sharing": "shared",
+      "sort_order": 0,
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "archive_reason": null,
+      "catalog_item_id": "58364fa8-38f2-4365-af9d-9bd2a7df9310",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "2d19a855-2139-4303-9a50-497239ed1779",
+      "intent": "active",
+      "notes": "",
+      "priority": 3,
+      "project_id": "68a04deb-fa26-482e-a5c7-5b99a484fd6c",
+      "qty": 5,
+      "sharing": "shared",
+      "sort_order": 1,
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "archive_reason": null,
+      "catalog_item_id": "2f742662-13ec-4888-a422-e8321de4664d",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "7d131f11-13d5-4674-b219-57995d1c2e2e",
+      "intent": "active",
+      "notes": "",
+      "priority": 2,
+      "project_id": "68a04deb-fa26-482e-a5c7-5b99a484fd6c",
+      "qty": 2,
+      "sharing": "shared",
+      "sort_order": 0,
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "archive_reason": null,
+      "catalog_item_id": "58364fa8-38f2-4365-af9d-9bd2a7df9310",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "c86a478b-7ed9-45be-b2f9-b5a75c164f4a",
+      "intent": "active",
+      "notes": "",
+      "priority": 3,
+      "project_id": "7a3e28da-0d85-4db3-9c97-439213876d2c",
+      "qty": 10,
+      "sharing": "shared",
+      "sort_order": 1,
+      "updated_at": "2026-11-08T09:00:00"
+    },
+    {
+      "archive_reason": null,
+      "catalog_item_id": "ad6487b2-f91b-4ee5-8ae1-115179f687d8",
+      "created_at": "2026-11-08T09:00:00",
+      "id": "ea6d12cc-0274-47f3-8251-28c407bb372f",
+      "intent": "active",
+      "notes": "",
+      "priority": 2,
+      "project_id": "7a3e28da-0d85-4db3-9c97-439213876d2c",
+      "qty": 1,
+      "sharing": "exclusive",
+      "sort_order": 2,
+      "updated_at": "2026-11-08T09:00:00"
+    }
+  ],
+  "version": 1
+}

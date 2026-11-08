@@ -44,6 +44,8 @@ Router notes (ADR-002): HTML pages live in `src/projectbudget/web/pages/` and th
 
 The forecast engine (`domain/forecast.py`) is a pure function of the plan, the backlog, the spend since `balance_as_of` and today; `services/forecast.py` only gathers those inputs. Every rule and guard in RFC v3 §5 is a golden test in `tests/test_forecast.py`; change the engine only with a matching golden case. The timeline chart is Chart.js, vendored under `src/projectbudget/web/static/vendor/chartjs/` with its checksum, fed through `data-*` attributes by `static/timeline.js`.
 
+The export document (ADR-008) is defined by the pydantic models in `src/projectbudget/adapters/export_format.py`; `services/transfer.py` reads and writes it. Adding an entity means adding it to both and to `tests/test_transfer.py`, whose round trip compares backlog and forecast JSON byte for byte. `tests/fixtures/workspace.json` is an export of the canonical workspace; regenerate it with `uv run python scripts/make_fixture.py` when the seed changes.
+
 The canonical fictional workspace is `src/projectbudget/fixtures/canonical.py`; tests, acceptance checks and the demo seed from it.
 
 ## Conventions

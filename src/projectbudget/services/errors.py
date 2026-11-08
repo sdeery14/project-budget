@@ -5,6 +5,7 @@ which exceptions mean "your input was wrong" (422) and which mean "that
 conflicts with what exists" (409). Everything else is a bug and stays a 500.
 """
 
+from projectbudget.adapters.export_format import InvalidDocumentError
 from projectbudget.domain.catalog import (
     InvalidNameError,
     InvalidPriorityError,
@@ -15,7 +16,13 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.money import CurrencyMismatchError, InvalidCurrencyError, MoneyParseError
 from projectbudget.services.backlog import DuplicateOrderError
 from projectbudget.services.budget import InvalidOverrideError, InvalidPlanError
-from projectbudget.services.catalog import NegativeEstimateError, SlugTakenError, UnitInUseError
+from projectbudget.services.catalog import (
+    MergedItemError,
+    MergeError,
+    NegativeEstimateError,
+    SlugTakenError,
+    UnitInUseError,
+)
 from projectbudget.services.inventory import (
     InsufficientOnHandError,
     InvalidMovementError,
@@ -23,12 +30,13 @@ from projectbudget.services.inventory import (
     RequirementNotActiveError,
     SharedReusableConsumptionError,
 )
-from projectbudget.services.purchases import InvalidPurchaseError
+from projectbudget.services.purchases import InvalidPurchaseError, PurchaseStateError
 from projectbudget.services.requirements import (
     InvalidArchiveReasonError,
     ItemReferenceError,
     UnitMismatchError,
 )
+from projectbudget.services.transfer import ImportConflictError, WorkspaceNotEmptyError
 
 VALIDATION_ERRORS: tuple[type[Exception], ...] = (
     InvalidNameError,
@@ -48,12 +56,18 @@ VALIDATION_ERRORS: tuple[type[Exception], ...] = (
     InvalidPlanError,
     InvalidOverrideError,
     InvalidPurchaseError,
+    InvalidDocumentError,
+    ImportConflictError,
 )
 """Bad input: answer 422."""
 
 CONFLICT_ERRORS: tuple[type[Exception], ...] = (
     SlugTakenError,
     UnitInUseError,
+    MergeError,
+    MergedItemError,
+    PurchaseStateError,
+    WorkspaceNotEmptyError,
     SharedReusableConsumptionError,
     InsufficientOnHandError,
     OverConsumptionError,

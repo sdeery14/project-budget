@@ -58,6 +58,13 @@ def _detail_context(
         "kinds": list(ItemKind),
         "review_states": list(ReviewState),
         "confidences": list(Confidence),
+        "merge_targets": [
+            other
+            for other in catalog.list_items(factory, principal)
+            if other.id != item_id
+            and other.unit == catalog.get_item(factory, principal, item_id).unit
+            and other.kind == catalog.get_item(factory, principal, item_id).kind
+        ],
         **extra,
     }
 
@@ -128,6 +135,17 @@ def update_item(
     except USER_ERRORS as exc:
         return _detail_error(request, principal, item_id, exc)
     return RedirectResponse(f"{CATALOG_PATH}/{item_id}", status_code=303)
+
+
+@router.post(CATALOG_PATH + "/{item_id}/merge", response_class=HTMLResponse)
+def merge_item(
+    request: Request, principal: Owner, item_id: str, target_id: Annotated[str, Form()]
+) -> Response:
+    try:
+        target = catalog.merge_items(session_factory(request), principal, item_id, target_id)
+    except USER_ERRORS as exc:
+        return _detail_error(request, principal, item_id, exc)
+    return RedirectResponse(f"{CATALOG_PATH}/{target.id}", status_code=303)
 
 
 @router.post(CATALOG_PATH + "/{item_id}/estimates", response_class=HTMLResponse)

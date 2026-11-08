@@ -35,7 +35,7 @@ class DuplicateOrderError(ValueError):
 def get_backlog(session_factory: SessionFactory, principal: Principal) -> Backlog:
     currency = workspace.get_currency(session_factory)
     with session_factory() as db:
-        items = db.scalars(select(CatalogItem)).all()
+        items = db.scalars(select(CatalogItem).where(CatalogItem.merged_into_id.is_(None))).all()
         requirements = db.scalars(
             select(Requirement).where(Requirement.intent == Intent.ACTIVE.value)
         ).all()

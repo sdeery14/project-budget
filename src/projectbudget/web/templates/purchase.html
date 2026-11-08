@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Purchase {{ purchase.ordered_on.isoformat() }} · ProjectBudget{% endblock %}
+{% block content %}
+{% set p = purchase %}
+<section class="card">
+  <h1>Purchase on {{ p.ordered_on.isoformat() }}{% if p.vendor %} from {{ p.vendor }}{% endif %}
+    <span class="badge">{{ p.status.value }}</span></h1>
+  <p class="muted"><a href="/purchases">All purchases</a> · <a href="/backlog">Backlog</a> · <a href="/timeline">Timeline</a></p>
+  {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+
+  <ul class="kpi">
+    <li><span class="label">Total</span><span class="value" id="purchase-total">{{ p.total }} {{ currency }}</span></li>
+    <li><span class="label">Shipping + tax</span><span class="value">{{ p.shipping + p.tax }}</span></li>
+    <li><span class="label">Still to receive</span><span class="value" id="outstanding">{{ p.remaining_qty if p.open else 0 }}</span></li>
+  </ul>
+
+  {% if p.status.value != "cancelled" %}
+  <h2>Details</h2>
+  <form method="post" action="/purchases/{{ p.id }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grow"><label for="vendor">Vendor</label><input id="vendor" name="vendor" type="text" maxlength="200" value="{{ p.vendor }}"></div>
+    <div><label for="ordered_on">Date</label><input id="ordered_on" name="ordered_on" type="date" value="{{ p.ordered_on.isoformat() }}"></div>
+    <div><label for="shipping">Shipping</label><input id="shipping" name="shipping" type="text" inputmode="decimal" value="{{ p.shipping }}"></div>
+    <div><label for="tax">Tax</label><input id="tax" name="tax" type="text" inputmode="decimal" value="{{ p.tax }}"></div>
+    <div class="grow"><label for="notes">Notes</label><input id="notes" name="notes" type="text" maxlength="2000" value="{{ p.notes }}"></div>
+    <button type="submit">Save</button>
+  </form>
+  {% endif %}
+
+  <h2>Status</h2>
+  <div class="actions">
+    {% if p.status.value == "planned" %}
+      <form method="post" action="/purchases/{{ p.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="ordered"><button type="submit" class="secondary">Mark ordered</button></form>
+    {% endif %}
+    {% if p.status.value == "ordered" and p.remaining_qty == p.lines | map(attribute="qty") | sum %}
+      <form method="post" action="/purchases/{{ p.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="planned"><button type="submit" class="secondary">Back to planned</button></form>
+    {% endif %}
+    {% if p.open %}
+      <form method="post" action="/purchases/{{ p.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="received"><button type="submit">Receive everything</button></form>
+      <form method="post" action="/purchases/{{ p.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="cancelled"><button type="submit" class="danger">Cancel purchase</button></form>
+    {% endif %}
+    {% if p.status.value == "cancelled" %}
+      <form method="post" action="/purchases/{{ p.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="planned"><button type="submit" class="secondary">Reopen as planned</button></form>
+    {% endif %}
+    {% if p.status.value == "received" %}<span class="muted">Received in full. Refunds are not in V1.</span>{% endif %}
+  </div>
+</section>
+
+<section class="card">
+  <h2>Lines</h2>
+  <div class="table-wrap">
+  <table id="lines">
+    <thead><tr><th>Item</th><th class="num">Qty</th><th class="money">Unit price</th><th class="money">Line total</th><th class="num">Received</th><th>Receive</th><th></th></tr></thead>
+    <tbody>
+      {% for line in p.lines %}
+      {% set item = items.get(line.catalog_item_id) %}
+      <tr id="line-{{ line.id }}">
+        <td>{% if item %}<a href="/catalog/{{ item.id }}">{{ item.name }}</a> <span class="muted">({{ item.unit }})</span>{% else %}{{ line.catalog_item_id }}{% endif %}</td>
+        <td class="num">{{ line.qty }}</td>
+        <td class="money">{{ line.unit_price }}</td>
+        <td class="money">{{ line.total }}</td>
+        <td class="num">{{ line.received_qty }} / {{ line.qty }}</td>
+        <td>
+          {% if p.open and line.remaining > 0 %}
+          <form method="post" action="/purchases/{{ p.id }}/lines/{{ line.id }}/receive" class="actions">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input name="qty" type="number" min="1" max="{{ line.remaining }}" value="{{ line.remaining }}" aria-label="Quantity received">
+            <input name="occurred_on" type="date" aria-label="Received on">
+            <button type="submit" class="secondary">Receive</button>
+          </form>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td>
+          {% if p.open and line.received_qty == 0 and p.lines | length > 1 %}
+          <form method="post" action="/purchases/{{ p.id }}/lines/{{ line.id }}/remove">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="danger">Remove</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if p.open %}
+  <h3>Add a line</h3>
+  <form method="post" action="/purchases/{{ p.id }}/lines" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grow"><label for="catalog_item_id">Item</label>
+      <select id="catalog_item_id" name="catalog_item_id" required>
+        {% for item in catalog %}<option value="{{ item.id }}">{{ item.name }} ({{ item.unit }})</option>{% endfor %}
+      </select></div>
+    <div><label for="qty">Qty</label><input id="qty" name="qty" type="number" min="1" value="1" required></div>
+    <div><label for="unit_price">Unit price ({{ currency }})</label><input id="unit_price" name="unit_price" type="text" inputmode="decimal" required></div>
+    <button type="submit">Add line</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
