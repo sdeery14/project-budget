@@ -18,14 +18,26 @@ from projectbudget.domain.catalog import (
     Intent,
     ItemKind,
     MovementReason,
+    PurchaseStatus,
     ReviewState,
     Sharing,
 )
 from projectbudget.domain.consolidation import Backlog, BacklogRow
+from projectbudget.domain.forecast import (
+    DEFAULT_HORIZON_MONTHS,
+    Forecast,
+    ItemOutcome,
+    ItemStatus,
+    MonthRecord,
+    Schedule,
+    ScheduledPurchase,
+)
 from projectbudget.domain.money import Money
+from projectbudget.services.budget import OverrideInfo, PlanInfo
 from projectbudget.services.catalog import CatalogItemInfo, EstimateInfo
 from projectbudget.services.inventory import MovementInfo
 from projectbudget.services.projects import ProjectInfo
+from projectbudget.services.purchases import PurchaseInfo, PurchaseLineInfo
 from projectbudget.services.requirements import RequirementInfo
 
 
@@ -314,3 +326,269 @@ class BacklogOut(BaseModel):
 
 class OrderIn(BaseModel):
     item_ids: list[str]
+
+
+# --- budget plan -----------------------------------------------------------------
+
+
+class OverrideIn(Stripped):
+    month: date = Field(description="Any day in the month; normalised to the first.")
+    delta: StrictStr = Field(description='Signed decimal string, e.g. "-120.00".')
+    label: str = Field(min_length=1, max_length=100)
+
+
+class OverrideOut(BaseModel):
+    id: str
+    month: date
+    delta: MoneyOut
+    label: str
+
+    @classmethod
+    def of(cls, info: OverrideInfo) -> "OverrideOut":
+        return cls(id=info.id, month=info.month, delta=MoneyOut.of(info.delta), label=info.label)
+
+
+class PlanIn(Stripped):
+    earmarked_funds: StrictStr = Field(description="Balance on balance_as_of as a decimal string.")
+    protected_reserve: StrictStr = "0"
+    monthly_contribution: StrictStr = "0"
+    horizon_months: int = DEFAULT_HORIZON_MONTHS
+    contingency_pct: int = 0
+    balance_as_of: date | None = Field(
+        default=None, description="Omit to reset to today when the balance changed."
+    )
+
+
+class PlanOut(BaseModel):
+    currency: str
+    earmarked_funds: MoneyOut
+    balance_as_of: date
+    protected_reserve: MoneyOut
+    monthly_contribution: MoneyOut
+    horizon_months: int
+    contingency_pct: int
+    updated_at: datetime
+    overrides: list[OverrideOut]
+
+    @classmethod
+    def of(cls, info: PlanInfo) -> "PlanOut":
+        return cls(
+            currency=info.currency,
+            earmarked_funds=MoneyOut.of(info.earmarked_funds),
+            balance_as_of=info.balance_as_of,
+            protected_reserve=MoneyOut.of(info.protected_reserve),
+            monthly_contribution=MoneyOut.of(info.monthly_contribution),
+            horizon_months=info.horizon_months,
+            contingency_pct=info.contingency_pct,
+            updated_at=info.updated_at,
+            overrides=[OverrideOut.of(o) for o in info.overrides],
+        )
+
+
+# --- purchases -------------------------------------------------------------------
+
+
+class PurchaseLineIn(Stripped):
+    catalog_item_id: str
+    qty: int
+    unit_price: StrictStr
+
+
+class PurchaseIn(Stripped):
+    lines: list[PurchaseLineIn] = Field(min_length=1)
+    vendor: str = ""
+    ordered_on: date | None = None
+    status: PurchaseStatus = PurchaseStatus.RECEIVED
+    shipping: StrictStr | None = None
+    tax: StrictStr | None = None
+    notes: str = ""
+
+
+class MarkPurchasedIn(Stripped):
+    item_id: str
+    qty: int
+    unit_price: StrictStr
+    vendor: str = ""
+
+
+class PurchaseLineOut(BaseModel):
+    id: str
+    catalog_item_id: str
+    qty: int
+    unit_price: MoneyOut
+    received_qty: int
+    total: MoneyOut
+
+    @classmethod
+    def of(cls, info: PurchaseLineInfo) -> "PurchaseLineOut":
+        return cls(
+            id=info.id,
+            catalog_item_id=info.catalog_item_id,
+            qty=info.qty,
+            unit_price=MoneyOut.of(info.unit_price),
+            received_qty=info.received_qty,
+            total=MoneyOut.of(info.total),
+        )
+
+
+class PurchaseOut(BaseModel):
+    id: str
+    vendor: str
+    ordered_on: date
+    status: PurchaseStatus
+    currency: str
+    shipping: MoneyOut
+    tax: MoneyOut
+    total: MoneyOut
+    notes: str
+    lines: list[PurchaseLineOut]
+    created_at: datetime
+
+    @classmethod
+    def of(cls, info: PurchaseInfo) -> "PurchaseOut":
+        return cls(
+            id=info.id,
+            vendor=info.vendor,
+            ordered_on=info.ordered_on,
+            status=info.status,
+            currency=info.currency,
+            shipping=MoneyOut.of(info.shipping),
+            tax=MoneyOut.of(info.tax),
+            total=MoneyOut.of(info.total),
+            notes=info.notes,
+            lines=[PurchaseLineOut.of(line) for line in info.lines],
+            created_at=info.created_at,
+        )
+
+
+# --- forecast --------------------------------------------------------------------
+
+DISCLAIMER = "Planning projection from your inputs; not financial advice."
+
+
+class ScheduledPurchaseOut(BaseModel):
+    item_id: str
+    name: str
+    qty: int
+    cost: MoneyOut
+    stale: bool
+
+    @classmethod
+    def of(cls, purchase: ScheduledPurchase) -> "ScheduledPurchaseOut":
+        return cls(
+            item_id=purchase.item.item_id,
+            name=purchase.item.name,
+            qty=purchase.item.qty,
+            cost=MoneyOut.of(purchase.cost),
+            stale=purchase.stale,
+        )
+
+
+class MonthOverrideOut(BaseModel):
+    month: date
+    delta: MoneyOut
+    label: str
+
+
+class MonthOut(BaseModel):
+    month: date
+    opening: MoneyOut
+    contribution: MoneyOut
+    overrides: list[MonthOverrideOut]
+    purchases: list[ScheduledPurchaseOut]
+    closing: MoneyOut
+    blocked: bool
+    stale: bool
+
+    @classmethod
+    def of(cls, record: MonthRecord) -> "MonthOut":
+        return cls(
+            month=record.month,
+            opening=MoneyOut.of(record.opening),
+            contribution=MoneyOut.of(record.contribution),
+            overrides=[
+                MonthOverrideOut(month=o.month, delta=MoneyOut.of(o.delta), label=o.label)
+                for o in record.overrides
+            ],
+            purchases=[ScheduledPurchaseOut.of(p) for p in record.purchases],
+            closing=MoneyOut.of(record.closing),
+            blocked=record.blocked,
+            stale=record.stale,
+        )
+
+
+class ItemOutcomeOut(BaseModel):
+    item_id: str
+    name: str
+    unit: str
+    priority: int
+    qty: int
+    unit_price: MoneyOut
+    cost: MoneyOut
+    status: ItemStatus
+    month: date | None
+    stale: bool
+
+    @classmethod
+    def of(cls, outcome: ItemOutcome) -> "ItemOutcomeOut":
+        return cls(
+            item_id=outcome.item.item_id,
+            name=outcome.item.name,
+            unit=outcome.item.unit,
+            priority=outcome.item.priority,
+            qty=outcome.item.qty,
+            unit_price=MoneyOut.of(outcome.item.unit_price),
+            cost=MoneyOut.of(outcome.cost),
+            status=outcome.status,
+            month=outcome.month,
+            stale=outcome.stale,
+        )
+
+
+class ScheduleOut(BaseModel):
+    contingency_pct: int
+    opening_balance: MoneyOut
+    blocked: bool
+    recovery_month: date | None
+    scheduled_total: MoneyOut
+    months: list[MonthOut]
+    items: list[ItemOutcomeOut]
+
+    @classmethod
+    def of(cls, sched: Schedule) -> "ScheduleOut":
+        return cls(
+            contingency_pct=sched.contingency_pct,
+            opening_balance=MoneyOut.of(sched.opening_balance),
+            blocked=sched.blocked,
+            recovery_month=sched.recovery_month,
+            scheduled_total=MoneyOut.of(sched.scheduled_total),
+            months=[MonthOut.of(m) for m in sched.months],
+            items=[ItemOutcomeOut.of(i) for i in sched.items],
+        )
+
+
+class ForecastOut(BaseModel):
+    today: date
+    balance_as_of: date
+    balance_stale: bool
+    recent_purchases_total: MoneyOut
+    lower_bound: bool
+    unpriced_count: int
+    unpriced_ahead: bool
+    optimistic: ScheduleOut
+    conservative: ScheduleOut
+    disclaimer: str = DISCLAIMER
+
+    @classmethod
+    def of(cls, result: Forecast) -> "ForecastOut":
+        return cls(
+            today=result.today,
+            balance_as_of=result.plan.balance_as_of,
+            balance_stale=result.balance_stale,
+            recent_purchases_total=MoneyOut.of(result.recent_purchases_total),
+            lower_bound=result.lower_bound,
+            unpriced_count=result.unpriced_count,
+            unpriced_ahead=result.unpriced_ahead,
+            optimistic=ScheduleOut.of(result.optimistic),
+            conservative=ScheduleOut.of(result.conservative),
+        )

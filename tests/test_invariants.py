@@ -1,8 +1,7 @@
 """The RFC v3 §4 invariants that PR4a can already prove, each as a named test on both backends.
 
-Still to come with their PRs: "a purchase never implies project membership"
-(PR5, purchases), catalog merge (PR6), sync no-op and archive-on-missing (sync
-PRs). Foreign-key enforcement lives in test_engine.py.
+Still to come with their PRs: catalog merge (PR6), sync no-op and
+archive-on-missing (sync PRs). Foreign-key enforcement lives in test_engine.py.
 """
 
 import uuid
@@ -16,7 +15,15 @@ from projectbudget.domain.money import CurrencyMismatchError, Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import Requirement
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import backlog, catalog, inventory, projects, requirements, workspace
+from projectbudget.services import (
+    backlog,
+    catalog,
+    inventory,
+    projects,
+    purchases,
+    requirements,
+    workspace,
+)
 
 NOW = datetime(2026, 11, 8, 9, 0, 0)
 
@@ -237,3 +244,26 @@ def test_on_hand_never_goes_negative_through_consumption_but_adjustments_correct
     assert inventory.on_hand(session_factory, principal, req.catalog_item_id) == 0
     with pytest.raises(inventory.InsufficientOnHandError):
         inventory.adjust(session_factory, principal, req.catalog_item_id, -1, note="Lost one")
+
+
+def test_a_purchase_never_implies_project_membership_but_consumption_does(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    project = projects.create_project(session_factory, principal, projects.ProjectCreate("Shed"))
+    req = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=4, item_text="Hinge"),
+    )
+    purchases.mark_purchased(session_factory, principal, req.catalog_item_id, 4, Money(300, "USD"))
+    # Stock arrived, but nothing says which project it belongs to yet.
+    assert inventory.on_hand(session_factory, principal, req.catalog_item_id) == 4
+    assert inventory.consumed(session_factory, principal, req.id) == 0
+    received = inventory.list_movements(session_factory, principal, req.catalog_item_id)[0]
+    assert received.reason is MovementReason.RECEIVED
+    assert received.requirement_id is None
+    assert received.purchase_line_id is not None
+    # Consuming against the requirement is the allocation to the project.
+    used = inventory.consume(session_factory, principal, req.id, 3)
+    assert used.requirement_id == req.id
+    assert inventory.consumed(session_factory, principal, req.id) == 3

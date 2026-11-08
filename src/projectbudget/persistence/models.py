@@ -177,7 +177,7 @@ class InventoryMovement(Base):
     """A fact about stock: received, consumed against a requirement, or an adjustment.
 
     On-hand is the sum of ``delta_qty``; consumption is the allocation to a project.
-    ``purchase_line_id`` arrives with purchases (PR5).
+    ``purchase_line_id`` links a receipt to the purchase line it fulfils.
     """
 
     __tablename__ = "inventory_movements"
@@ -194,6 +194,9 @@ class InventoryMovement(Base):
     reason: Mapped[str] = mapped_column(String(20))
     requirement_id: Mapped[str | None] = mapped_column(
         String(UUID_LENGTH), ForeignKey("requirements.id"), nullable=True, index=True
+    )
+    purchase_line_id: Mapped[str | None] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("purchase_lines.id"), nullable=True, index=True
     )
     occurred_on: Mapped[date] = mapped_column(Date())
     note: Mapped[str] = mapped_column(String(255))
@@ -213,3 +216,84 @@ class BacklogOrder(Base):
         String(UUID_LENGTH), ForeignKey("catalog_items.id", ondelete="CASCADE"), primary_key=True
     )
     position: Mapped[int] = mapped_column(Integer())
+
+
+class BudgetPlan(Base):
+    """The one budget plan (ADR-006). ``earmarked_funds`` is the balance on ``balance_as_of``."""
+
+    __tablename__ = "budget_plans"
+    __table_args__ = (
+        CheckConstraint("horizon_months BETWEEN 1 AND 120", name="horizon_range"),
+        CheckConstraint("contingency_pct BETWEEN 0 AND 100", name="contingency_range"),
+        CheckConstraint("protected_reserve >= 0", name="reserve_not_negative"),
+    )
+
+    id: Mapped[str] = mapped_column(String(UUID_LENGTH), primary_key=True)
+    currency: Mapped[str] = mapped_column(String(3))
+    earmarked_funds: Mapped[int] = mapped_column(BigInteger())
+    balance_as_of: Mapped[date] = mapped_column(Date())
+    protected_reserve: Mapped[int] = mapped_column(BigInteger())
+    monthly_contribution: Mapped[int] = mapped_column(BigInteger())
+    horizon_months: Mapped[int] = mapped_column(Integer())
+    contingency_pct: Mapped[int] = mapped_column(Integer())
+    updated_at: Mapped[datetime] = mapped_column(DateTime())
+
+
+class MonthOverride(Base):
+    """A signed, labeled one-off for one month: a bonus, a tax bill, a holiday."""
+
+    __tablename__ = "month_overrides"
+
+    id: Mapped[str] = mapped_column(String(UUID_LENGTH), primary_key=True)
+    plan_id: Mapped[str] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("budget_plans.id", ondelete="CASCADE"), index=True
+    )
+    month: Mapped[date] = mapped_column(Date())
+    delta: Mapped[int] = mapped_column(BigInteger())
+    label: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime())
+
+
+class Purchase(Base):
+    """A fact: money spent (or committed) with a vendor. Never touched by sync (RFC v3 §4)."""
+
+    __tablename__ = "purchases"
+    __table_args__ = (
+        CheckConstraint("status IN ('planned', 'ordered', 'received', 'cancelled')", name="status"),
+        CheckConstraint("shipping >= 0", name="shipping_not_negative"),
+        CheckConstraint("tax >= 0", name="tax_not_negative"),
+    )
+
+    id: Mapped[str] = mapped_column(String(UUID_LENGTH), primary_key=True)
+    vendor: Mapped[str] = mapped_column(String(200))
+    ordered_on: Mapped[date] = mapped_column(Date())
+    status: Mapped[str] = mapped_column(String(20))
+    currency: Mapped[str] = mapped_column(String(3))
+    shipping: Mapped[int] = mapped_column(BigInteger())
+    tax: Mapped[int] = mapped_column(BigInteger())
+    notes: Mapped[str] = mapped_column(Text())
+    created_at: Mapped[datetime] = mapped_column(DateTime())
+    updated_at: Mapped[datetime] = mapped_column(DateTime())
+
+
+class PurchaseLine(Base):
+    """One item on a purchase. Receiving a line creates an inventory movement."""
+
+    __tablename__ = "purchase_lines"
+    __table_args__ = (
+        CheckConstraint("qty > 0", name="qty_positive"),
+        CheckConstraint("unit_price >= 0", name="unit_price_not_negative"),
+        CheckConstraint("received_qty BETWEEN 0 AND qty", name="received_within_qty"),
+    )
+
+    id: Mapped[str] = mapped_column(String(UUID_LENGTH), primary_key=True)
+    purchase_id: Mapped[str] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("purchases.id", ondelete="CASCADE"), index=True
+    )
+    catalog_item_id: Mapped[str] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("catalog_items.id"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer())
+    qty: Mapped[int] = mapped_column(Integer())
+    unit_price: Mapped[int] = mapped_column(BigInteger())
+    received_qty: Mapped[int] = mapped_column(Integer())

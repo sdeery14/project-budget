@@ -42,6 +42,8 @@ Service-layer notes (RFC v3 §3, ADR-005): every function in `src/projectbudget/
 
 Router notes (ADR-002): HTML pages live in `src/projectbudget/web/pages/` and their JSON twins in `src/projectbudget/api/`; both call the same service functions and contain no business logic. Request and response models for the API are in `api/schemas.py`; money crosses that boundary as a decimal string plus an integer minor-unit field, never a float. User-caused service errors are grouped in `services/errors.py`: validation errors answer 422, conflicts with existing state answer 409, missing records 404, read-only tokens 403, wired once in `web/errors.py`. Pages catch the same group to re-render the form with the message. HTMX fragments are returned for requests carrying `HX-Request`; the htmx config in `base.html` swaps 422 responses so an error row replaces the row that caused it.
 
+The forecast engine (`domain/forecast.py`) is a pure function of the plan, the backlog, the spend since `balance_as_of` and today; `services/forecast.py` only gathers those inputs. Every rule and guard in RFC v3 §5 is a golden test in `tests/test_forecast.py`; change the engine only with a matching golden case. The timeline chart is Chart.js, vendored under `src/projectbudget/web/static/vendor/chartjs/` with its checksum, fed through `data-*` attributes by `static/timeline.js`.
+
 The canonical fictional workspace is `src/projectbudget/fixtures/canonical.py`; tests, acceptance checks and the demo seed from it.
 
 ## Conventions

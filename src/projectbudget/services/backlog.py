@@ -1,7 +1,7 @@
 """The consolidated backlog and its workspace-level order (ADR-004).
 
 This module only gathers facts from the database and hands them to the pure
-``domain.consolidation`` module. On-order is zero until purchases land (PR5).
+``domain.consolidation`` module.
 """
 
 from collections.abc import Sequence
@@ -25,6 +25,7 @@ from projectbudget.services import workspace
 from projectbudget.services.catalog import load_item
 from projectbudget.services.guards import require_write
 from projectbudget.services.inventory import consumed_by_requirement, on_hand_by_item
+from projectbudget.services.purchases import on_order_by_item
 
 
 class DuplicateOrderError(ValueError):
@@ -40,6 +41,7 @@ def get_backlog(session_factory: SessionFactory, principal: Principal) -> Backlo
         ).all()
         consumed = consumed_by_requirement(db, (r.id for r in requirements))
         on_hand = on_hand_by_item(db)
+        on_order = on_order_by_item(db)
         estimates = _current_estimates(db)
         order = db.scalars(
             select(BacklogOrder.catalog_item_id).order_by(BacklogOrder.position)
@@ -53,7 +55,7 @@ def get_backlog(session_factory: SessionFactory, principal: Principal) -> Backlo
             kind=ItemKind(item.kind),
             unit=item.unit,
             on_hand=on_hand.get(item.id, 0),
-            on_order=0,
+            on_order=on_order.get(item.id, 0),
             unit_price=Money(estimates[item.id].amount, estimates[item.id].currency)
             if item.id in estimates
             else None,

@@ -30,6 +30,7 @@ from projectbudget.persistence.models import (
     CatalogItem,
     InventoryMovement,
     PriceEstimate,
+    PurchaseLine,
     Requirement,
 )
 from projectbudget.persistence.session import SessionFactory
@@ -157,15 +158,16 @@ def find_by_slug(db: Session, slug: str) -> CatalogItem | None:
 
 
 def _is_referenced(db: Session, item_id: str) -> bool:
-    """True when any requirement, price estimate or stock movement is expressed in this item's unit.
+    """True when a requirement, estimate, movement or purchase line is in this item's unit.
 
-    Movements count even when they net to zero: the history "received 10, used 10"
-    is in metres and must stay in metres.
+    Movements count even when they net to zero, and purchase lines count in every
+    status: the history "received 10, used 10" is in metres and must stay in metres.
     """
     probes = (
         select(Requirement.id).where(Requirement.catalog_item_id == item_id),
         select(PriceEstimate.id).where(PriceEstimate.catalog_item_id == item_id),
         select(InventoryMovement.id).where(InventoryMovement.catalog_item_id == item_id),
+        select(PurchaseLine.id).where(PurchaseLine.catalog_item_id == item_id),
     )
     return any(db.scalar(probe.limit(1)) is not None for probe in probes)
 

@@ -80,6 +80,7 @@ class MovementInfo:
     delta_qty: int
     reason: MovementReason
     requirement_id: str | None
+    purchase_line_id: str | None
     occurred_on: date
     note: str
     created_at: datetime
@@ -92,6 +93,7 @@ def _info(row: InventoryMovement) -> MovementInfo:
         delta_qty=row.delta_qty,
         reason=MovementReason(row.reason),
         requirement_id=row.requirement_id,
+        purchase_line_id=row.purchase_line_id,
         occurred_on=row.occurred_on,
         note=row.note,
         created_at=row.created_at,
@@ -150,6 +152,7 @@ def _record(
     occurred_on: date | None,
     note: str,
     now: datetime | None,
+    purchase_line_id: str | None = None,
 ) -> InventoryMovement:
     row = InventoryMovement(
         id=str(uuid.uuid4()),
@@ -157,6 +160,7 @@ def _record(
         delta_qty=delta,
         reason=reason,
         requirement_id=requirement_id,
+        purchase_line_id=purchase_line_id,
         occurred_on=occurred_on or today(),
         note=note,
         created_at=now or utcnow(),
@@ -241,6 +245,30 @@ def consume(
             now=now,
         )
         return _info(row)
+
+
+def record_receipt(
+    db: Session,
+    *,
+    item_id: str,
+    qty: int,
+    purchase_line_id: str,
+    occurred_on: date,
+    now: datetime,
+) -> MovementInfo:
+    """Put a received purchase line into stock, inside the caller's (item-locked) transaction."""
+    row = _record(
+        db,
+        item_id=item_id,
+        delta=validate_quantity(qty),
+        reason=MovementReason.RECEIVED.value,
+        requirement_id=None,
+        occurred_on=occurred_on,
+        note="",
+        now=now,
+        purchase_line_id=purchase_line_id,
+    )
+    return _info(row)
 
 
 def on_hand(session_factory: SessionFactory, principal: Principal, item_id: str) -> int:

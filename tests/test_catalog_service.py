@@ -10,12 +10,13 @@ from projectbudget.domain.catalog import (
     InvalidSlugError,
     InvalidUnitError,
     ItemKind,
+    PurchaseStatus,
     ReviewState,
 )
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import catalog, inventory, projects, requirements
+from projectbudget.services import catalog, inventory, projects, purchases, requirements
 from projectbudget.services.clock import today
 from projectbudget.services.guards import ReadOnlyPrincipalError
 
@@ -248,3 +249,29 @@ def test_unit_cannot_change_once_stock_movements_exist_even_at_zero_stock(
             session_factory, principal, rope.id, catalog.CatalogItemUpdate(unit="ft")
         )
     assert catalog.get_item(session_factory, principal, rope.id).unit == "m"
+
+
+def test_unit_cannot_change_once_purchase_lines_reference_the_item_in_any_status(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    """10 metres at 1.00 a metre on order must not become 10 feet at 1.00 a foot."""
+    for status in (PurchaseStatus.ORDERED, PurchaseStatus.PLANNED, PurchaseStatus.CANCELLED):
+        rope = catalog.create_item(
+            session_factory,
+            principal,
+            catalog.CatalogItemCreate(name=f"Rope {status.value}", unit="m"),
+        )
+        purchases.record_purchase(
+            session_factory,
+            principal,
+            purchases.PurchaseCreate(
+                lines=(purchases.PurchaseLineCreate(rope.id, 10, Money(100, "USD")),),
+                status=status,
+            ),
+        )
+        assert inventory.on_hand(session_factory, principal, rope.id) == 0
+        with pytest.raises(catalog.UnitInUseError):
+            catalog.update_item(
+                session_factory, principal, rope.id, catalog.CatalogItemUpdate(unit="ft")
+            )
+        assert catalog.get_item(session_factory, principal, rope.id).unit == "m"
