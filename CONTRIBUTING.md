@@ -27,6 +27,15 @@ export PROJECTBUDGET_TEST_DATABASE_URL=postgresql+psycopg://projectbudget:projec
 
 CI runs the same commands on both SQLite and PostgreSQL. A PR merges only when both are green.
 
+## Running the app locally
+
+```sh
+uv run projectbudget db upgrade   # apply migrations (SQLite in ~/.projectbudget by default)
+uv run projectbudget run          # http://127.0.0.1:8000/health
+```
+
+Point `PROJECTBUDGET_DATABASE_URL` (or `--database-url`) at PostgreSQL to use that path instead. `projectbudget db revision -m "..."` drafts a migration from the models with the next sequential id; `db current` and `db downgrade` complete the set. The container runs `db upgrade` and then `run` on every start.
+
 ## Conventions
 
 - **Branch from `main`, squash-merge back.** The PR title becomes the commit message, so write it as a [conventional commit](https://www.conventionalcommits.org/): `feat(domain): add Money`, `fix(sync): ...`, `docs: ...`, `chore(ci): ...`.
