@@ -17,8 +17,10 @@ from projectbudget.persistence.session import make_session_factory
 from projectbudget.settings import Settings
 from projectbudget.web.errors import register_error_handlers
 from projectbudget.web.health import router as health_router
-from projectbudget.web.pages.home import router as home_router
+from projectbudget.web.pages.backlog import router as backlog_router
+from projectbudget.web.pages.catalog import router as catalog_router
 from projectbudget.web.pages.login import router as login_router
+from projectbudget.web.pages.projects import router as projects_router
 from projectbudget.web.pages.tokens import router as tokens_router
 from projectbudget.web.security import OriginCheckMiddleware, SecurityHeadersMiddleware
 from projectbudget.web.templates import STATIC_DIR
@@ -55,7 +57,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(health_router)
     app.include_router(login_router)
-    app.include_router(home_router)
+    app.include_router(backlog_router)
+    app.include_router(projects_router)
+    app.include_router(catalog_router)
     app.include_router(tokens_router)
     app.include_router(api_router)
     register_error_handlers(app)

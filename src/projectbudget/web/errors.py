@@ -3,6 +3,8 @@
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
+from projectbudget.services.errors import CONFLICT_ERRORS, VALIDATION_ERRORS
+from projectbudget.services.guards import NotFoundError, ReadOnlyPrincipalError
 from projectbudget.web.auth import (
     LOGIN_PATH,
     AuthenticationRequiredError,
@@ -63,8 +65,30 @@ def read_only_token(request: Request, _exc: Exception) -> Response:
     return _error(request, READ_ONLY_MESSAGE, 403)
 
 
+def not_found(request: Request, exc: Exception) -> Response:
+    return _error(request, str(exc), 404)
+
+
+def read_only_principal(request: Request, _exc: Exception) -> Response:
+    return _error(request, READ_ONLY_MESSAGE, 403)
+
+
+def invalid_input(request: Request, exc: Exception) -> Response:
+    return _error(request, str(exc), 422)
+
+
+def conflict(request: Request, exc: Exception) -> Response:
+    return _error(request, str(exc), 409)
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AuthenticationRequiredError, authentication_required)
     app.add_exception_handler(SetupRequiredError, setup_required)
     app.add_exception_handler(CsrfError, csrf_rejected)
     app.add_exception_handler(ReadOnlyTokenError, read_only_token)
+    app.add_exception_handler(NotFoundError, not_found)
+    app.add_exception_handler(ReadOnlyPrincipalError, read_only_principal)
+    for error in VALIDATION_ERRORS:
+        app.add_exception_handler(error, invalid_input)
+    for error in CONFLICT_ERRORS:
+        app.add_exception_handler(error, conflict)

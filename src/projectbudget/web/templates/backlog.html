@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Backlog · ProjectBudget{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Backlog</h1>
+  <p class="muted">Everything your active projects still need, consolidated per item. Shared tools are
+  counted once at the largest demand; parts add up. On-hand stock is already subtracted.</p>
+
+  <ul class="kpi">
+    <li>
+      <span class="label">Still to buy{% if backlog.is_lower_bound %} (lower bound){% endif %}</span>
+      <span class="value" id="backlog-total">{{ backlog.total }} {{ backlog.currency }}</span>
+    </li>
+    <li><span class="label">Priced rows</span><span class="value">{{ backlog.rows | length }}</span></li>
+    <li><span class="label">Needs a price</span><span class="value" id="unpriced-count">{{ backlog.unpriced_count }}</span></li>
+  </ul>
+
+  {% if backlog.is_lower_bound %}
+  <p class="alert warning" role="status">{{ backlog.unpriced_count }} item{{ "s" if backlog.unpriced_count != 1 else "" }} without a price.
+  The total above is a lower bound: unpriced items are counted, never summed as zero.</p>
+  {% endif %}
+
+  <div id="backlog-table">
+    {% include "partials/backlog_table.html" %}
+  </div>
+
+  <details class="assumptions">
+    <summary>Assumptions behind shared reusable items</summary>
+    <ul>
+      {% for line in assumptions %}<li>{{ line }}</li>{% endfor %}
+    </ul>
+  </details>
+</section>
+{% endblock %}

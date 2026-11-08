@@ -60,6 +60,14 @@ class EstimateOrigin(StrEnum):
     PURCHASE = "purchase"
 
 
+class MovementReason(StrEnum):
+    """Why stock changed. Consumption references a requirement; receipts a purchase line (PR5)."""
+
+    RECEIVED = "received"
+    CONSUMED = "consumed"
+    ADJUSTMENT = "adjustment"
+
+
 class InvalidSlugError(ValueError):
     """Not lower-case ASCII letters, digits and single hyphens, 1-100 characters."""
 

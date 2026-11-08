@@ -15,7 +15,7 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import catalog, projects, requirements
+from projectbudget.services import catalog, inventory, projects, requirements
 from projectbudget.services.clock import today
 from projectbudget.services.guards import ReadOnlyPrincipalError
 
@@ -227,3 +227,24 @@ def test_unit_cannot_change_while_requirements_or_estimates_use_it(
         ).unit
         == "roll"
     )
+
+
+def test_unit_cannot_change_once_stock_movements_exist_even_at_zero_stock(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    """The history "received 10 m, lost 10 m" is in metres and must stay in metres."""
+    rope = catalog.create_item(
+        session_factory, principal, catalog.CatalogItemCreate(name="Rope", unit="m")
+    )
+    inventory.adjust(session_factory, principal, rope.id, 10, note="stock take")
+    with pytest.raises(catalog.UnitInUseError):
+        catalog.update_item(
+            session_factory, principal, rope.id, catalog.CatalogItemUpdate(unit="ft")
+        )
+    inventory.adjust(session_factory, principal, rope.id, -10, note="used up")
+    assert inventory.on_hand(session_factory, principal, rope.id) == 0
+    with pytest.raises(catalog.UnitInUseError):
+        catalog.update_item(
+            session_factory, principal, rope.id, catalog.CatalogItemUpdate(unit="ft")
+        )
+    assert catalog.get_item(session_factory, principal, rope.id).unit == "m"

@@ -1,8 +1,8 @@
 """The RFC v3 §4 invariants that PR4a can already prove, each as a named test on both backends.
 
-Still to come with their PRs: priority of a backlog row and the shortfall rules
-(PR4b), consumption and on-hand (PR6), catalog merge (PR6), sync no-op and
-archive-on-missing (sync PRs). Foreign-key enforcement lives in test_engine.py.
+Still to come with their PRs: "a purchase never implies project membership"
+(PR5, purchases), catalog merge (PR6), sync no-op and archive-on-missing (sync
+PRs). Foreign-key enforcement lives in test_engine.py.
 """
 
 import uuid
@@ -11,12 +11,12 @@ from datetime import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from projectbudget.domain.catalog import Intent, ItemKind
+from projectbudget.domain.catalog import Intent, ItemKind, MovementReason
 from projectbudget.domain.money import CurrencyMismatchError, Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import Requirement
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import catalog, projects, requirements, workspace
+from projectbudget.services import backlog, catalog, inventory, projects, requirements, workspace
 
 NOW = datetime(2026, 11, 8, 9, 0, 0)
 
@@ -137,3 +137,103 @@ def test_unpriced_items_never_contribute_zero(
     )
     assert catalog.current_estimate(session_factory, principal, item.id) is None
     assert item.kind is ItemKind.CONSUMABLE
+
+
+def test_consumption_against_a_shared_reusable_requirement_is_rejected(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    project = projects.create_project(session_factory, principal, projects.ProjectCreate("Bench"))
+    clamp = catalog.create_item(
+        session_factory, principal, catalog.CatalogItemCreate(name="Clamp", kind=ItemKind.REUSABLE)
+    )
+    shared = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=2, catalog_item_id=clamp.id),
+    )
+    inventory.adjust(session_factory, principal, clamp.id, 2)
+    with pytest.raises(inventory.SharedReusableConsumptionError):
+        inventory.consume(session_factory, principal, shared.id, 1)
+    assert inventory.on_hand(session_factory, principal, clamp.id) == 2
+
+
+def test_row_priority_equals_the_most_urgent_contributing_requirement(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    a = projects.create_project(session_factory, principal, projects.ProjectCreate("A"))
+    b = projects.create_project(session_factory, principal, projects.ProjectCreate("B"))
+    bolt = catalog.create_item(session_factory, principal, catalog.CatalogItemCreate(name="Bolt"))
+    for project, priority in ((a, 3), (b, 1)):
+        requirements.add_requirement(
+            session_factory,
+            principal,
+            requirements.RequirementCreate(
+                project_id=project.id, qty=1, priority=priority, catalog_item_id=bolt.id
+            ),
+        )
+    (row,) = backlog.get_backlog(session_factory, principal).unpriced
+    assert row.priority == 1
+    assert set(row.project_ids) == {a.id, b.id}
+
+
+def test_cancelled_requirements_leave_the_shortfall_but_keep_consumption_records(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    project = projects.create_project(session_factory, principal, projects.ProjectCreate("Shed"))
+    req = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=5, item_text="Screws"),
+    )
+    inventory.adjust(session_factory, principal, req.catalog_item_id, 2)
+    inventory.consume(session_factory, principal, req.id, 2)
+    assert backlog.get_backlog(session_factory, principal).unpriced[0].gross_shortfall == 3
+    requirements.set_intent(session_factory, principal, req.id, Intent.CANCELLED)
+    assert backlog.get_backlog(session_factory, principal).unpriced == ()
+    assert inventory.consumed(session_factory, principal, req.id) == 2
+    movements = inventory.list_movements(session_factory, principal, req.catalog_item_id)
+    assert [m.requirement_id for m in movements if m.reason is MovementReason.CONSUMED] == [req.id]
+
+
+def test_unpriced_totals_carry_an_unpriced_count(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    project = projects.create_project(session_factory, principal, projects.ProjectCreate("Shed"))
+    priced = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=2, item_text="Hinge"),
+    )
+    catalog.add_estimate(
+        session_factory,
+        principal,
+        priced.catalog_item_id,
+        catalog.EstimateCreate(price=Money(300, "USD")),
+    )
+    requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=1, item_text="Latch"),
+    )
+    result = backlog.get_backlog(session_factory, principal)
+    assert result.total == Money(600, "USD")
+    assert result.unpriced_count == 1
+    assert result.is_lower_bound
+
+
+def test_on_hand_never_goes_negative_through_consumption_but_adjustments_correct_it(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    project = projects.create_project(session_factory, principal, projects.ProjectCreate("Shed"))
+    req = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=5, item_text="Screws"),
+    )
+    with pytest.raises(inventory.InsufficientOnHandError):
+        inventory.consume(session_factory, principal, req.id, 1)
+    inventory.adjust(session_factory, principal, req.catalog_item_id, 3, note="Found a box")
+    inventory.consume(session_factory, principal, req.id, 3)
+    assert inventory.on_hand(session_factory, principal, req.catalog_item_id) == 0
+    with pytest.raises(inventory.InsufficientOnHandError):
+        inventory.adjust(session_factory, principal, req.catalog_item_id, -1, note="Lost one")
