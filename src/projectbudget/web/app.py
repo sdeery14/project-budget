@@ -24,6 +24,7 @@ from projectbudget.web.pages.data import router as data_router
 from projectbudget.web.pages.login import router as login_router
 from projectbudget.web.pages.projects import router as projects_router
 from projectbudget.web.pages.purchases import router as purchases_router
+from projectbudget.web.pages.sync import router as sync_router
 from projectbudget.web.pages.timeline import router as timeline_router
 from projectbudget.web.pages.tokens import router as tokens_router
 from projectbudget.web.security import OriginCheckMiddleware, SecurityHeadersMiddleware
@@ -68,6 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(timeline_router)
     app.include_router(purchases_router)
     app.include_router(data_router)
+    app.include_router(sync_router)
     app.include_router(tokens_router)
     app.include_router(api_router)
     register_error_handlers(app)

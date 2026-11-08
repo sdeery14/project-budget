@@ -150,3 +150,24 @@ def validate_priority(priority: int) -> int:
         msg = f"Priority must be {PRIORITY_MIN}-{PRIORITY_MAX}, got {priority!r}"
         raise InvalidPriorityError(msg)
     return priority
+
+
+class SourceKind(StrEnum):
+    """Where a manifest comes from (ADR-007). Arbitrary URLs are not a kind."""
+
+    FILE = "file"
+    CSV = "csv"
+    GITHUB = "github"
+
+
+class RunStatus(StrEnum):
+    """How a sync run ended."""
+
+    APPLIED = "applied"
+    NOOP = "noop"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
+REMOVED_FROM_SOURCE = "removed_from_source"
+"""The archive reason sync writes when an item disappears from its manifest."""

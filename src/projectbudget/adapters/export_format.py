@@ -20,11 +20,15 @@ from projectbudget.domain.catalog import (
     MovementReason,
     PurchaseStatus,
     ReviewState,
+    RunStatus,
     Sharing,
+    SourceKind,
 )
 
 FORMAT = "projectbudget-workspace"
-VERSION = 1
+VERSION = 2
+SUPPORTED_VERSIONS = (1, 2)
+"""Version 1 had no sync sources or source references; it is read and upgraded on import."""
 
 
 class InvalidDocumentError(ValueError):
@@ -40,6 +44,8 @@ class ProjectRecord(Record):
     name: str
     archived: bool
     notes: str
+    source_id: str | None = None
+    external_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -52,6 +58,7 @@ class CatalogItemRecord(Record):
     unit: str
     review_state: ReviewState
     merged_into_id: str | None
+    created_by_source_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -67,6 +74,8 @@ class RequirementRecord(Record):
     archive_reason: str | None
     sharing: Sharing
     notes: str
+    source_id: str | None = None
+    external_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -134,6 +143,30 @@ class BudgetPlanRecord(Record):
     overrides: list[MonthOverrideRecord]
 
 
+class SyncSourceRecord(Record):
+    id: str
+    kind: SourceKind
+    locator: str
+    branch: str | None
+    path: str | None
+    external_project_id: str | None
+    token_env: str | None
+    last_revision: str | None
+    last_content_hash: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SyncRunRecord(Record):
+    id: str
+    source_id: str
+    status: RunStatus
+    revision: str | None
+    content_hash: str | None
+    summary: dict[str, Any]
+    created_at: datetime
+
+
 class WorkspaceDocument(Record):
     """The whole workspace. Collections are sorted by id so two exports of one state are equal."""
 
@@ -149,6 +182,8 @@ class WorkspaceDocument(Record):
     purchases: list[PurchaseRecord]
     backlog_order: list[str]
     budget_plan: BudgetPlanRecord | None
+    sync_sources: list[SyncSourceRecord] = Field(default_factory=list)
+    sync_runs: list[SyncRunRecord] = Field(default_factory=list)
 
     def to_json(self) -> str:
         """Stable text: sorted keys, two-space indent, trailing newline."""
@@ -171,10 +206,12 @@ def parse_document(data: bytes | str | dict[str, Any]) -> WorkspaceDocument:
         raise InvalidDocumentError("An export is a JSON object")
     if raw.get("format") != FORMAT:
         raise InvalidDocumentError(f"Not a ProjectBudget export (format {raw.get('format')!r})")
-    if raw.get("version") != VERSION:
+    if raw.get("version") not in SUPPORTED_VERSIONS:
         raise InvalidDocumentError(
-            f"Export version {raw.get('version')!r} is not supported; this build reads version {VERSION}"
+            f"Export version {raw.get('version')!r} is not supported; this build reads versions "
+            + ", ".join(str(v) for v in SUPPORTED_VERSIONS)
         )
+    raw = {**raw, "version": VERSION}  # version 1 documents validate as version 2 with defaults
     try:
         return WorkspaceDocument.model_validate(raw)
     except ValidationError as exc:

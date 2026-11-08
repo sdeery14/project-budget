@@ -59,6 +59,17 @@ class Settings(BaseSettings):
         ge=1,
         description="A login session ends after this long without a request.",
     )
+    sync_import_dir: Path | None = Field(
+        default=None,
+        description=(
+            "Directory that file and CSV sync sources may read from (ADR-007). "
+            "Default: an 'imports' folder inside data_dir. Paths outside it are refused."
+        ),
+    )
+
+    @property
+    def effective_sync_import_dir(self) -> Path:
+        return (self.sync_import_dir or self.data_dir / "imports").expanduser()
 
     @property
     def effective_database_url(self) -> str:

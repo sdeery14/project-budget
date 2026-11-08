@@ -1,0 +1,209 @@
+{
+  "$defs": {
+    "EstimateDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "pattern": "^\\d+(\\.\\d{1,2})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Decimal string, e.g. \"12.50\". YAML numbers are rejected.",
+          "title": "Amount"
+        },
+        "amount_minor": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amount Minor"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        }
+      },
+      "title": "EstimateDocument",
+      "type": "object"
+    },
+    "ItemDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog"
+        },
+        "estimate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EstimateDocument"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind",
+          "default": "consumable"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "priority": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "qty": {
+          "minimum": 1,
+          "title": "Qty",
+          "type": "integer"
+        },
+        "sharing": {
+          "$ref": "#/$defs/Sharing",
+          "default": "shared"
+        },
+        "unit": {
+          "default": "each",
+          "maxLength": 30,
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "qty"
+      ],
+      "title": "ItemDocument",
+      "type": "object"
+    },
+    "ItemKind": {
+      "description": "Consumables are used up; reusables (tools) are owned once and shared (ADR-004).",
+      "enum": [
+        "consumable",
+        "reusable"
+      ],
+      "title": "ItemKind",
+      "type": "string"
+    },
+    "ProjectDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ProjectDocument",
+      "type": "object"
+    },
+    "Sharing": {
+      "description": "How a reusable requirement counts in consolidation (ADR-004). Ignored for consumables.",
+      "enum": [
+        "shared",
+        "exclusive"
+      ],
+      "title": "Sharing",
+      "type": "string"
+    }
+  },
+  "$id": "https://github.com/sdeery14/project-budget/blob/main/docs/manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Manifest v1. The JSON Schema in the repository is generated from this model.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ItemDocument"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectDocument"
+    },
+    "version": {
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "project",
+    "items"
+  ],
+  "title": "ProjectBudget manifest v1",
+  "type": "object"
+}

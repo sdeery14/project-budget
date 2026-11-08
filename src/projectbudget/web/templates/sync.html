@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Sync · ProjectBudget{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Sync</h1>
+  <p class="muted">Keep a <code>project-budget.yaml</code> next to a project, locally or in a GitHub repository,
+  and pull it in. Every sync shows its plan before it applies, applies in one step, and never touches purchases,
+  stock or the budget. Local files are read from <code>{{ import_dir }}</code> only.</p>
+  {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/sync" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div><label for="kind">Source</label>
+      <select id="kind" name="kind">{% for k in kinds %}<option value="{{ k.value }}">{{ k.value }}</option>{% endfor %}</select></div>
+    <div class="grow"><label for="locator">File path or owner/repo</label>
+      <input id="locator" name="locator" type="text" maxlength="500" placeholder="shed/project-budget.yaml or someone/some-repo" required></div>
+    <div><label for="branch">Branch (GitHub)</label><input id="branch" name="branch" type="text" maxlength="200" placeholder="default branch"></div>
+    <div><label for="path">Path in repo (GitHub)</label><input id="path" name="path" type="text" maxlength="500" placeholder="project-budget.yaml"></div>
+    <div><label for="external_project_id">Project id (CSV)</label><input id="external_project_id" name="external_project_id" type="text" maxlength="100" placeholder="e.g. garden-gate"></div>
+    <div><label for="token_env">Token variable (private repo)</label><input id="token_env" name="token_env" type="text" maxlength="100" placeholder="GITHUB_TOKEN"></div>
+    <button type="submit">Add source</button>
+  </form>
+  <p class="muted">For a private repository, put a fine-grained read-only token in an environment variable on the
+  server and give its <em>name</em> here; the token itself is never stored.</p>
+
+  <div class="table-wrap">
+  <table id="sources">
+    <thead><tr><th>Source</th><th>Kind</th><th>Project</th><th>Last revision</th></tr></thead>
+    <tbody>
+      {% for s in sources %}
+      <tr id="source-{{ s.id }}">
+        <td><a href="/sync/{{ s.id }}">{{ s.label }}</a></td>
+        <td><span class="badge">{{ s.kind.value }}</span></td>
+        <td>{% if s.project_id %}<a href="/projects/{{ s.project_id }}">{{ s.project_name }}</a>{% else %}<span class="muted">not synced yet</span>{% endif %}</td>
+        <td>{% if s.last_revision %}<code>{{ s.last_revision[:12] }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No sources yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
