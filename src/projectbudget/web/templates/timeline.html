@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Timeline · ProjectBudget{% endblock %}
+{% block scripts %}
+{% if forecast %}
+  <script src="{{ request.url_for('static', path='vendor/chartjs/chart.umd.js') }}" defer></script>
+  <script src="{{ request.url_for('static', path='timeline.js') }}" defer></script>
+{% endif %}
+{% endblock %}
+{% block content %}
+{% if not forecast %}
+<section class="card">
+  <h1>Timeline</h1>
+  <p>The timeline needs a budget plan: how much is set aside, how much is protected, and how much you
+  add each month. <a href="/budget">Set up the budget</a> and come back.</p>
+</section>
+{% else %}
+{% set c = forecast.conservative %}
+{% set o = forecast.optimistic %}
+<section class="card">
+  <h1>Timeline</h1>
+  <p class="muted">What you can buy next, and when, from the backlog in strict priority order. Nothing is
+  skipped because a cheaper item behind it would fit.</p>
+  {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+
+  <ul class="kpi">
+    <li><span class="label">Opening balance this month</span>
+      <span class="value{% if c.opening_balance.is_negative %} neg{% endif %}" id="opening-balance">{{ c.opening_balance }} {{ currency }}</span></li>
+    <li><span class="label">Spent since {{ forecast.plan.balance_as_of.isoformat() }}</span>
+      <span class="value" id="recent-purchases">{{ forecast.recent_purchases_total }} {{ currency }}</span></li>
+    <li><span class="label">Scheduled (conservative{% if forecast.lower_bound %}, lower bound{% endif %})</span>
+      <span class="value" id="scheduled-total">{{ c.scheduled_total }} {{ currency }}</span></li>
+    <li><span class="label">Items</span>
+      <span class="value">{{ c.scheduled | length }} scheduled · {{ c.unscheduled | length }} not</span></li>
+  </ul>
+
+  {% if forecast.lower_bound %}
+  <p class="alert warning" role="status">{{ forecast.unpriced_count }} item{{ "s" if forecast.unpriced_count != 1 else "" }} without a price.
+    Totals are lower bounds.{% if forecast.unpriced_ahead %} An unpriced item is at least as urgent as something scheduled, so this timeline is optimistic.{% endif %}
+    <a href="/backlog">See the backlog</a>.</p>
+  {% endif %}
+  {% if forecast.balance_stale %}
+  <p class="alert warning" role="status">Balance may be stale: it was entered on {{ forecast.plan.balance_as_of.isoformat() }}.
+    <a href="/budget">Re-enter it</a>.</p>
+  {% endif %}
+  {% if c.blocked %}
+  <p class="alert error" role="status">Timeline blocked: the balance after the reserve and recent purchases is below zero.
+    {% if c.recovery_month %}It recovers in {{ c.recovery_month.strftime("%B %Y") }}.{% else %}It does not recover within the horizon at current inputs.{% endif %}</p>
+  {% endif %}
+  {% if c.unscheduled | selectattr("status", "equalto", "not_fundable") | list %}
+  <p class="alert error" role="status">Not fundable at current inputs: the monthly contribution is zero or less and the balance does not cover the next item.</p>
+  {% endif %}
+
+  <div class="chart-wrap">
+    <canvas id="timeline-chart"
+            data-labels='{{ chart.labels }}'
+            data-conservative='{{ chart.conservative }}'
+            data-optimistic='{{ chart.optimistic }}'
+            data-purchases='{{ chart.purchases }}'
+            data-currency="{{ chart.currency }}"
+            aria-label="Closing balance per month, optimistic and conservative"></canvas>
+  </div>
+
+  <h2>Items</h2>
+  <div class="table-wrap">
+  <table id="items">
+    <thead>
+      <tr><th>Item</th><th>Priority</th><th class="num">Qty</th><th class="money">Unit price</th>
+          <th>Optimistic</th><th>Conservative ({{ c.contingency_pct }} %)</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for outcome in c.items %}
+      {% set opt = optimistic_by_item[outcome.item.item_id] %}
+      <tr id="item-{{ outcome.item.item_id }}">
+        <td><a href="/catalog/{{ outcome.item.item_id }}">{{ outcome.item.name }}</a>
+          {% if outcome.stale %}<span class="badge stale" title="Estimate older than 90 days">stale estimate</span>{% endif %}</td>
+        <td><span class="badge p{{ outcome.item.priority }}">P{{ outcome.item.priority }}</span></td>
+        <td class="num">{{ outcome.item.qty }} {{ outcome.item.unit }}</td>
+        <td class="money">{{ outcome.item.unit_price }}</td>
+        <td>{{ opt.cost }} ·
+          {% if opt.month %}{{ opt.month.strftime("%b %Y") }}{% else %}<span class="badge warn">{{ opt.status.replace("_", " ") }}</span>{% endif %}</td>
+        <td>{{ outcome.cost }} ·
+          {% if outcome.month %}{{ outcome.month.strftime("%b %Y") }}{% else %}<span class="badge warn">{{ outcome.status.replace("_", " ") }}</span>{% endif %}</td>
+        <td>
+          <form method="post" action="/purchases/mark" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="item_id" value="{{ outcome.item.item_id }}">
+            <input type="hidden" name="qty" value="{{ outcome.item.qty }}">
+            <input type="hidden" name="unit_price" value="{{ outcome.item.unit_price }}">
+            <button type="submit" class="secondary small">Mark purchased</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">Nothing priced to schedule. Add requirements and prices, then come back.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted">"Mark purchased" records a received purchase at the quantity and price shown; the
+  item leaves the backlog and the timeline, and the spend leaves the budget.</p>
+</section>
+
+<section class="card">
+  <h2>Month by month (conservative)</h2>
+  <div class="table-wrap">
+  <table id="months">
+    <thead>
+      <tr><th>Month</th><th class="money">Opening</th><th class="money">Contribution</th><th>Overrides</th><th>Purchases</th><th class="money">Closing</th></tr>
+    </thead>
+    <tbody>
+      {% for month in c.months %}
+      <tr id="month-{{ month.month.isoformat() }}"{% if month.blocked %} class="blocked"{% endif %}>
+        <td>{{ month.month.strftime("%b %Y") }}{% if month.blocked %} <span class="badge warn">blocked</span>{% endif %}{% if month.stale %} <span class="badge stale">stale</span>{% endif %}</td>
+        <td class="money{% if month.opening.is_negative %} neg{% endif %}">{{ month.opening }}</td>
+        <td class="money">{{ month.contribution }}</td>
+        <td>{% if month.overrides %}<ul class="inline-list">{% for ov in month.overrides %}<li>{{ ov.delta }} {{ ov.label }}</li>{% endfor %}</ul>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{% if month.purchases %}<ul class="inline-list">{% for p in month.purchases %}<li>{{ p.item.name }} x {{ p.item.qty }}: {{ p.cost }}</li>{% endfor %}</ul>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="money{% if month.closing.is_negative %} neg{% endif %}">{{ month.closing }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="disclaimer">{{ disclaimer }}</p>
+</section>
+{% endif %}
+{% endblock %}

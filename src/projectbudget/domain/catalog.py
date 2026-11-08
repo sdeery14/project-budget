@@ -60,6 +60,15 @@ class EstimateOrigin(StrEnum):
     PURCHASE = "purchase"
 
 
+class PurchaseStatus(StrEnum):
+    """Planned purchases count nowhere; ordered ones are on-order; received ones are stock."""
+
+    PLANNED = "planned"
+    ORDERED = "ordered"
+    RECEIVED = "received"
+    CANCELLED = "cancelled"
+
+
 class MovementReason(StrEnum):
     """Why stock changed. Consumption references a requirement; receipts a purchase line (PR5)."""
 

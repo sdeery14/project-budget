@@ -17,7 +17,8 @@ from projectbudget.domain.catalog import Confidence, ItemKind, Sharing
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import catalog, inventory, projects, requirements, workspace
+from projectbudget.services import budget, catalog, inventory, projects, requirements, workspace
+from projectbudget.services.budget import PlanInfo
 from projectbudget.services.catalog import CatalogItemInfo
 from projectbudget.services.projects import ProjectInfo
 from projectbudget.services.requirements import RequirementInfo
@@ -39,6 +40,7 @@ class CanonicalWorkspace:
     gate_bolts: RequirementInfo
     gate_hinges: RequirementInfo
     workbench_vise: RequirementInfo
+    plan: PlanInfo
 
 
 def seed_canonical(
@@ -143,6 +145,22 @@ def seed_canonical(
     price(bolts, "0.45", Confidence.MEDIUM)
     price(vise, "89.00", Confidence.LOW)
 
+    # 150.00 in the jar on as_of, 80.00 of it protected, 25.00 added each month, 10 % contingency:
+    # the clamps fit in month 1, the vise waits for month 2 (optimistic) or month 3 (conservative).
+    plan = budget.set_plan(
+        session_factory,
+        principal,
+        budget.PlanUpdate(
+            earmarked_funds=Money.parse("150.00", CURRENCY),
+            protected_reserve=Money.parse("80.00", CURRENCY),
+            monthly_contribution=Money.parse("25.00", CURRENCY),
+            horizon_months=12,
+            contingency_pct=10,
+            balance_as_of=as_of,
+        ),
+        now=now,
+    )
+
     return CanonicalWorkspace(
         workbench=workbench,
         garden_gate=gate,
@@ -156,4 +174,5 @@ def seed_canonical(
         gate_bolts=gate_bolts,
         gate_hinges=gate_hinges,
         workbench_vise=workbench_vise,
+        plan=plan,
     )

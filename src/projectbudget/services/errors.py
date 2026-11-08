@@ -14,6 +14,7 @@ from projectbudget.domain.catalog import (
 )
 from projectbudget.domain.money import CurrencyMismatchError, InvalidCurrencyError, MoneyParseError
 from projectbudget.services.backlog import DuplicateOrderError
+from projectbudget.services.budget import InvalidOverrideError, InvalidPlanError
 from projectbudget.services.catalog import NegativeEstimateError, SlugTakenError, UnitInUseError
 from projectbudget.services.inventory import (
     InsufficientOnHandError,
@@ -22,6 +23,7 @@ from projectbudget.services.inventory import (
     RequirementNotActiveError,
     SharedReusableConsumptionError,
 )
+from projectbudget.services.purchases import InvalidPurchaseError
 from projectbudget.services.requirements import (
     InvalidArchiveReasonError,
     ItemReferenceError,
@@ -43,6 +45,9 @@ VALIDATION_ERRORS: tuple[type[Exception], ...] = (
     UnitMismatchError,
     InvalidMovementError,
     DuplicateOrderError,
+    InvalidPlanError,
+    InvalidOverrideError,
+    InvalidPurchaseError,
 )
 """Bad input: answer 422."""
 

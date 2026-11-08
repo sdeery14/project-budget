@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Budget · ProjectBudget{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Budget</h1>
+  <p class="muted">The money set aside for your projects, in {{ currency }}. The balance is what the jar held on
+  the date you give; purchases since then are subtracted automatically. Changing the balance without a
+  date stamps it as today.</p>
+  {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/budget" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div><label for="earmarked_funds">Balance ({{ currency }})</label>
+      <input id="earmarked_funds" name="earmarked_funds" type="text" inputmode="decimal" required
+             value="{{ plan.earmarked_funds if plan else '' }}" placeholder="150.00"></div>
+    <div><label for="balance_as_of">Balance as of</label>
+      <input id="balance_as_of" name="balance_as_of" type="date"
+             value="{{ plan.balance_as_of.isoformat() if plan else '' }}"></div>
+    <div><label for="protected_reserve">Protected reserve</label>
+      <input id="protected_reserve" name="protected_reserve" type="text" inputmode="decimal"
+             value="{{ plan.protected_reserve if plan else '0.00' }}"></div>
+    <div><label for="monthly_contribution">Monthly contribution</label>
+      <input id="monthly_contribution" name="monthly_contribution" type="text" inputmode="decimal"
+             value="{{ plan.monthly_contribution if plan else '0.00' }}"></div>
+    <div><label for="horizon_months">Horizon (months)</label>
+      <input id="horizon_months" name="horizon_months" type="number" min="1" max="120"
+             value="{{ plan.horizon_months if plan else default_horizon }}"></div>
+    <div><label for="contingency_pct">Contingency %</label>
+      <input id="contingency_pct" name="contingency_pct" type="number" min="0" max="100"
+             value="{{ plan.contingency_pct if plan else 0 }}"></div>
+    <button type="submit">{{ "Save plan" if plan else "Create plan" }}</button>
+  </form>
+  {% if plan %}
+  <p class="muted">Last saved {{ plan.updated_at.strftime("%Y-%m-%d %H:%M") }} UTC ·
+    <a href="/timeline">See the timeline</a></p>
+  {% else %}
+  <p class="muted">No plan yet. Enter a balance to unlock the timeline.</p>
+  {% endif %}
+</section>
+
+{% if plan %}
+<section class="card">
+  <h2>Month overrides</h2>
+  <p class="muted">One-off changes to a month: a bonus, a tax bill, a holiday without contributions.
+  Negative amounts take money out.</p>
+  <form method="post" action="/budget/overrides" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div><label for="month">Month</label><input id="month" name="month" type="month" required></div>
+    <div><label for="delta">Amount ({{ currency }})</label>
+      <input id="delta" name="delta" type="text" inputmode="decimal" placeholder="-120.00" required></div>
+    <div class="grow"><label for="label">Label</label>
+      <input id="label" name="label" type="text" maxlength="100" placeholder="e.g. car insurance" required></div>
+    <button type="submit">Add override</button>
+  </form>
+  <table id="overrides">
+    <thead><tr><th>Month</th><th class="money">Amount</th><th>Label</th><th></th></tr></thead>
+    <tbody>
+      {% for o in plan.overrides %}
+      <tr>
+        <td>{{ o.month.strftime("%b %Y") }}</td>
+        <td class="money{% if o.delta.is_negative %} neg{% endif %}">{{ o.delta }}</td>
+        <td>{{ o.label }}</td>
+        <td>
+          <form method="post" action="/budget/overrides/{{ o.id }}/delete" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="danger">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No overrides. Every month gets the contribution and nothing else.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

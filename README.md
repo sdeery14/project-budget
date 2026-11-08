@@ -30,7 +30,7 @@ docker exec -it projectbudget projectbudget init --username you
 uvx projectbudget run --demo
 ```
 
-After signing in you land on the **Backlog**: create projects, add what each needs (type a name or pick from the catalog), price items and count stock on the catalog pages, and the backlog consolidates it all with shared tools counted once. Everything the pages do is also available as JSON under `/api/v1` (schema at `/api/v1/openapi.json` once signed in).
+After signing in you land on the **Backlog**: create projects, add what each needs (type a name or pick from the catalog), price items and count stock on the catalog pages, and the backlog consolidates it all with shared tools counted once. On the **Budget** page enter the balance you have set aside, the date it was true, a protected reserve and a monthly contribution; the **Timeline** then explains month by month what gets bought and when, in strict priority order, with an optimistic and a conservative date per item. Marking an item purchased records the purchase, puts it in stock and takes it out of the plan. Everything the pages do is also available as JSON under `/api/v1` (schema at `/api/v1/openapi.json` once signed in).
 
 There are no default credentials: the app serves only `/health` until `init` has run. `init` also fixes the workspace currency (USD unless `--currency` says otherwise); every price is an exact amount in that one currency (ADR-003). Behind a reverse proxy, terminate TLS there and pass the `Host` header through; the session cookie is `Secure` by default (`PROJECTBUDGET_SECURE_COOKIES=false` relaxes that for plain HTTP on a trusted network). API tokens for scripts are created on the **API tokens** page and sent as `Authorization: Bearer ...` to `/api/v1`.
 

@@ -112,3 +112,15 @@ details.assumptions summary { cursor: pointer; color: var(--muted); }
 section.card + section.card { margin-top: 1.5rem; }
 .stack { display: grid; gap: 0.75rem; }
 form.stack label { margin-top: 0; }
+
+/* Timeline and budget */
+.chart-wrap { position: relative; height: 18rem; margin: 1rem 0; }
+.badge.ok { color: var(--accent); border-color: var(--accent); }
+.badge.warn { color: var(--danger); border-color: var(--danger); }
+.badge.stale { background: var(--warning-bg); }
+.disclaimer { color: var(--muted); font-size: 0.875rem; margin-top: 1.5rem; }
+td.money, th.money { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.blocked td { color: var(--muted); }
+.inline-list { margin: 0; padding: 0; list-style: none; }
+.inline-list li { display: block; }
+.neg { color: var(--danger); }
