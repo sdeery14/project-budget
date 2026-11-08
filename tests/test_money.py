@@ -1,6 +1,6 @@
 """``Money`` is exact: integer minor units, one currency per operation (ADR-003)."""
 
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 from hypothesis import given, settings
@@ -94,6 +94,37 @@ def test_parse_decimal_strings(text: str, currency: str, amount: int) -> None:
 def test_parse_rejects_inexact_or_malformed_text(text: str, currency: str) -> None:
     with pytest.raises(MoneyParseError):
         Money.parse(text, currency)
+
+
+def test_parse_does_not_depend_on_the_decimal_context() -> None:
+    """Parsing reads the literal's digits; the caller's Decimal precision never rounds them."""
+    with localcontext() as ctx:
+        ctx.prec = 6
+        assert Money.parse("12345.67", "USD") == Money(1234567, "USD")
+        assert Money.parse("-12345.67", "USD") == Money(-1234567, "USD")
+        assert Money.parse("123456789.123", "KWD") == Money(123456789123, "KWD")
+    with localcontext() as ctx:
+        ctx.prec = 2
+        with pytest.raises(MoneyParseError):
+            Money.parse("12345.678", "USD")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "12.34000000000000000000000000001",  # a 1 beyond the default 28-digit precision
+        "0." + "0" * 40 + "1",
+        "1E-30",
+    ],
+)
+def test_parse_rejects_tiny_remainders_beyond_default_precision(text: str) -> None:
+    with pytest.raises(MoneyParseError):
+        Money.parse(text, "USD")
+
+
+def test_parse_accepts_trailing_zeros_of_any_length() -> None:
+    assert Money.parse("12.34" + "0" * 40, "USD") == Money(1234, "USD")
+    assert Money.parse("5" + "0" * 30 + "E-30", "JPY") == Money(5, "JPY")
 
 
 @pytest.mark.parametrize("value", [12.34, 1234, Decimal("12.34"), None])

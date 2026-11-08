@@ -25,7 +25,7 @@ from projectbudget.domain.catalog import (
 )
 from projectbudget.domain.money import CurrencyMismatchError, Money
 from projectbudget.domain.principal import Principal
-from projectbudget.persistence.models import CatalogItem, PriceEstimate
+from projectbudget.persistence.models import CatalogItem, PriceEstimate, Requirement
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services import workspace
 from projectbudget.services.clock import today, utcnow
@@ -44,6 +44,23 @@ class SlugTakenError(ValueError):
 
 class NegativeEstimateError(ValueError):
     """A price estimate is never below zero."""
+
+
+class UnitInUseError(ValueError):
+    """The unit cannot change while requirements or estimates are expressed in it.
+
+    Quantities and unit prices are numbers in the item's unit; changing the unit under
+    them would silently turn 10 metres at 1.00 a metre into 10 feet at 1.00 a foot.
+    Unit conversion is deferred (RFC v3 §2), so the change is refused instead.
+    """
+
+    def __init__(self, item_id: str, unit: str) -> None:
+        super().__init__(
+            f"Catalog item {item_id!r} keeps unit {unit!r} while requirements or "
+            "price estimates reference it"
+        )
+        self.item_id = item_id
+        self.unit = unit
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +150,13 @@ def find_by_slug(db: Session, slug: str) -> CatalogItem | None:
     return db.scalar(select(CatalogItem).where(CatalogItem.slug == slug))
 
 
+def _is_referenced(db: Session, item_id: str) -> bool:
+    """True when any requirement or price estimate is expressed in this item's unit."""
+    has_requirement = select(Requirement.id).where(Requirement.catalog_item_id == item_id).limit(1)
+    has_estimate = select(PriceEstimate.id).where(PriceEstimate.catalog_item_id == item_id).limit(1)
+    return db.scalar(has_requirement) is not None or db.scalar(has_estimate) is not None
+
+
 def insert_item(db: Session, command: CatalogItemCreate, now: datetime) -> CatalogItem:
     """Add an item inside a caller's transaction; the slug must be free."""
     name = validate_name(command.name)
@@ -200,7 +224,9 @@ def update_item(
             row.name = name
         if command.kind is not None:
             row.kind = ItemKind(command.kind).value
-        if unit is not None:
+        if unit is not None and unit != row.unit:
+            if _is_referenced(db, row.id):
+                raise UnitInUseError(row.id, row.unit)
             row.unit = unit
         if command.review_state is not None:
             row.review_state = ReviewState(command.review_state).value

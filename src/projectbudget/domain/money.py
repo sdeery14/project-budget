@@ -107,11 +107,24 @@ class Money:
             raise MoneyParseError(f"Not a decimal amount: {text!r}") from exc
         if not value.is_finite():
             raise MoneyParseError(f"Not a finite amount: {text!r}")
-        scaled = value.scaleb(digits)
-        if scaled != scaled.to_integral_value():
-            msg = f"{text!r} has more than {digits} decimal places, which {currency} cannot hold"
-            raise MoneyParseError(msg)
-        return cls(int(scaled), currency)
+        # Work on the exact digits of the literal, not through Decimal arithmetic: scaleb()
+        # and to_integral_value() round to the active context's precision, which would make
+        # the result depend on caller state and let "12.340...01" pass as 12.34.
+        sign, mantissa_digits, exponent = value.as_tuple()
+        if not isinstance(exponent, int):  # NaN and infinity carry a letter; excluded above
+            raise MoneyParseError(f"Not a finite amount: {text!r}")
+        mantissa = int("".join(map(str, mantissa_digits)) or "0")
+        shift = exponent + digits
+        if shift >= 0:
+            amount = mantissa * 10**shift
+        else:
+            amount, remainder = divmod(mantissa, 10**-shift)
+            if remainder:
+                msg = (
+                    f"{text!r} has more than {digits} decimal places, which {currency} cannot hold"
+                )
+                raise MoneyParseError(msg)
+        return cls(-amount if sign else amount, currency)
 
     @property
     def minor_unit_digits(self) -> int:

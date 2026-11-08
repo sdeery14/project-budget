@@ -15,7 +15,7 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import catalog
+from projectbudget.services import catalog, projects, requirements
 from projectbudget.services.clock import today
 from projectbudget.services.guards import ReadOnlyPrincipalError
 
@@ -178,3 +178,52 @@ def test_read_only_principals_cannot_write(
         )
     assert catalog.list_items(session_factory, read_only_principal) == [item]
     assert catalog.current_estimate(session_factory, read_only_principal, item.id) is None
+
+
+def test_unit_cannot_change_while_requirements_or_estimates_use_it(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    """10 metres at 1.00 a metre must never silently become 10 feet at 1.00 a foot."""
+    wire = catalog.create_item(
+        session_factory, principal, catalog.CatalogItemCreate(name="Wire", unit="m")
+    )
+    project = projects.create_project(session_factory, principal, projects.ProjectCreate("Shed"))
+    requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=10, catalog_item_id=wire.id),
+    )
+    with pytest.raises(catalog.UnitInUseError):
+        catalog.update_item(
+            session_factory, principal, wire.id, catalog.CatalogItemUpdate(unit="ft")
+        )
+    # The same unit spelled differently is not a change; other fields still update.
+    renamed = catalog.update_item(
+        session_factory,
+        principal,
+        wire.id,
+        catalog.CatalogItemUpdate(name="Copper wire", unit=" M "),
+    )
+    assert (renamed.name, renamed.unit) == ("Copper wire", "m")
+
+    priced = catalog.create_item(
+        session_factory, principal, catalog.CatalogItemCreate(name="Rope", unit="m")
+    )
+    catalog.add_estimate(
+        session_factory, principal, priced.id, catalog.EstimateCreate(price=Money(100, "USD"))
+    )
+    with pytest.raises(catalog.UnitInUseError):
+        catalog.update_item(
+            session_factory, principal, priced.id, catalog.CatalogItemUpdate(unit="ft")
+        )
+    assert catalog.get_item(session_factory, principal, priced.id).unit == "m"
+
+    unused = catalog.create_item(
+        session_factory, principal, catalog.CatalogItemCreate(name="Tape", unit="m")
+    )
+    assert (
+        catalog.update_item(
+            session_factory, principal, unused.id, catalog.CatalogItemUpdate(unit="roll")
+        ).unit
+        == "roll"
+    )
