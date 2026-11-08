@@ -30,13 +30,13 @@ def _chart_data(result: Forecast) -> dict[str, str]:
     def closings(sched: Schedule) -> list[str]:
         return [str(month.closing) for month in sched.months]
 
+    # The engine carries both schedules over the same months, so the series line up
+    # point for point; nothing is padded or repeated here.
     labels = [month.month.strftime("%b %Y") for month in result.conservative.months]
-    optimistic = closings(result.optimistic)
-    optimistic += [optimistic[-1]] * (len(labels) - len(optimistic)) if optimistic else []
     return {
         "labels": json.dumps(labels),
         "conservative": json.dumps(closings(result.conservative)),
-        "optimistic": json.dumps(optimistic[: len(labels)]),
+        "optimistic": json.dumps(closings(result.optimistic)),
         "purchases": json.dumps(
             [str(month.purchases_total) for month in result.conservative.months]
         ),

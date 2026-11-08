@@ -9,9 +9,11 @@ from projectbudget.domain.forecast import (
     MonthOverride,
     QueueItem,
     add_months,
+    extend_through,
     forecast,
     month_start,
     queue_from_backlog,
+    schedule,
 )
 from projectbudget.domain.money import Money
 
@@ -259,3 +261,33 @@ def test_queue_item_cost_is_exact_money() -> None:
     item = QueueItem("x", "X", "each", 2, 3, usd("0.01"), date(2026, 11, 1))
     assert item.cost(0) == Money(3, USD)
     assert item.cost(33) == Money(4, USD)  # 3.99 rounds up to 4 minor units
+
+
+def test_both_schedules_cover_the_same_months_without_repeating_a_balance() -> None:
+    """A 50 contribution and a 95 purchase in December: January must show 55, never a copied 5."""
+    rows = backlog(("saw", 1, "95.00"))
+    result = forecast(plan("0.00", contribution="50.00", contingency=10), rows, usd("0"), TODAY)
+    optimistic, conservative = result.optimistic, result.conservative
+    assert [m.month for m in optimistic.months] == [NOV, DEC, JAN]
+    assert [m.month for m in conservative.months] == [NOV, DEC, JAN]
+    assert [str(m.closing) for m in optimistic.months] == ["50.00", "5.00", "55.00"]
+    assert [str(m.closing) for m in conservative.months] == ["50.00", "100.00", "45.50"]
+    carried = optimistic.months[2]
+    assert carried.purchases == ()
+    assert carried.opening == usd("5.00")
+    assert carried.contribution == usd("50.00")
+    assert [i.month for i in optimistic.items] == [DEC]  # items are untouched by the extension
+
+
+def test_extension_applies_overrides_and_tracks_recovery() -> None:
+    bonus = MonthOverride(month=JAN, delta=usd("100.00"), label="Bonus")
+    base = plan("0.00", contribution="10.00", overrides=(bonus,))
+    short = schedule(base, (), usd("30.00"), TODAY, contingency_pct=0)  # opening -30, one month
+    assert [str(m.closing) for m in short.months] == ["-20.00"]
+    assert short.recovery_month is None
+    longer = extend_through(short, base, 3)
+    assert [str(m.closing) for m in longer.months] == ["-20.00", "-10.00", "100.00"]
+    assert [m.blocked for m in longer.months] == [True, True, False]
+    assert longer.months[2].overrides == (bonus,)
+    assert longer.recovery_month == JAN
+    assert extend_through(longer, base, 2) is longer

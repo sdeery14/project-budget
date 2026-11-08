@@ -289,25 +289,71 @@ def _unscheduled(
     )
 
 
+def extend_through(sched: Schedule, plan: BudgetPlan, month_count: int) -> Schedule:
+    """Carry the accounting on (contribution and overrides, nothing bought) to ``month_count`` months.
+
+    A schedule stops recording once its queue is empty. When two schedules are shown
+    side by side the shorter one must keep counting rather than repeat its last balance.
+    """
+    if len(sched.months) >= month_count:
+        return sched
+    months = list(sched.months)
+    recovery = sched.recovery_month
+    start = months[0].month
+    for index in range(len(months), month_count):
+        month = add_months(start, index)
+        opening = months[-1].closing
+        overrides = tuple(o for o in plan.overrides if o.month == month)
+        closing = (
+            opening
+            + plan.monthly_contribution
+            + sum_money((o.delta for o in overrides), plan.currency)
+        )
+        blocked = closing.amount < 0
+        if sched.opening_balance.amount < 0 and recovery is None and not blocked:
+            recovery = month
+        months.append(
+            MonthRecord(
+                month=month,
+                opening=opening,
+                contribution=plan.monthly_contribution,
+                overrides=overrides,
+                purchases=(),
+                closing=closing,
+                blocked=blocked,
+            )
+        )
+    return Schedule(
+        contingency_pct=sched.contingency_pct,
+        opening_balance=sched.opening_balance,
+        months=tuple(months),
+        items=sched.items,
+        recovery_month=recovery,
+    )
+
+
 def forecast(
     plan: BudgetPlan,
     backlog: Backlog,
     recent_purchases_total: Money,
     today: date,
 ) -> Forecast:
-    """Both schedules plus the honesty flags: unpriced count, "unpriced ahead", stale balance."""
+    """Both schedules, over the same months, plus the honesty flags."""
     queue = queue_from_backlog(backlog)
     unpriced_ahead = bool(queue) and any(
         row.priority <= max(item.priority for item in queue) for row in backlog.unpriced
     )
+    optimistic = schedule(plan, queue, recent_purchases_total, today, contingency_pct=0)
+    conservative = schedule(
+        plan, queue, recent_purchases_total, today, contingency_pct=plan.contingency_pct
+    )
+    span = max(len(optimistic.months), len(conservative.months))
     return Forecast(
         today=today,
         plan=plan,
         recent_purchases_total=recent_purchases_total,
-        optimistic=schedule(plan, queue, recent_purchases_total, today, contingency_pct=0),
-        conservative=schedule(
-            plan, queue, recent_purchases_total, today, contingency_pct=plan.contingency_pct
-        ),
+        optimistic=extend_through(optimistic, plan, span),
+        conservative=extend_through(conservative, plan, span),
         unpriced_count=backlog.unpriced_count,
         unpriced_ahead=unpriced_ahead,
     )
