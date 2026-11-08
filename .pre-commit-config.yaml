@@ -1,5 +1,7 @@
 # Install once per clone: uv run pre-commit install
 # Run on everything:     uv run pre-commit run --all-files
+# Vendored third-party files are kept byte-for-byte as published (their checksums are documented).
+exclude: ^src/projectbudget/web/static/vendor/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

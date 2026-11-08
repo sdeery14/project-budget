@@ -13,7 +13,7 @@ from projectbudget.persistence import migrate
 from projectbudget.persistence.engine import make_engine
 from projectbudget.persistence.models import Owner
 from projectbudget.persistence.session import make_session_factory
-from projectbudget.services import auth
+from projectbudget.services import auth, workspace
 
 runner = CliRunner()
 
@@ -79,13 +79,23 @@ def _owner_exists(url: str) -> bool:
         engine.dispose()
 
 
+def _currency(url: str) -> str:
+    engine = make_engine(url)
+    try:
+        return workspace.get_currency(make_session_factory(engine))
+    finally:
+        engine.dispose()
+
+
 def test_init_creates_the_owner_once(migrated_url: str) -> None:
     base = ["--database-url", migrated_url, "init", "--username", "Sean"]
     result = runner.invoke(app, [*base, "--password-stdin"], input=OWNER_PASSWORD + "\n")
     assert result.exit_code == 0, result.output
     assert "Owner 'sean' created" in result.output
+    assert "currency: USD" in result.output
     assert "/login" in result.output
     assert _owner_exists(migrated_url)
+    assert _currency(migrated_url) == "USD"
 
     again = runner.invoke(app, [*base, "--password-stdin"], input=OWNER_PASSWORD + "\n")
     assert again.exit_code == 1
@@ -101,6 +111,48 @@ def test_init_prompts_and_confirms_the_password(migrated_url: str) -> None:
     assert result.exit_code == 0, result.output
     assert OWNER_PASSWORD not in result.output
     assert _owner_exists(migrated_url)
+
+
+def test_init_sets_the_workspace_currency(migrated_url: str) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--database-url",
+            migrated_url,
+            "init",
+            "--username",
+            "sean",
+            "--password-stdin",
+            "--currency",
+            "eur",
+        ],
+        input=OWNER_PASSWORD + "\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "currency: EUR" in result.output
+    assert _currency(migrated_url) == "EUR"
+
+
+def test_init_rejects_an_invalid_currency_before_touching_the_database(
+    migrated_url: str,
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--database-url",
+            migrated_url,
+            "init",
+            "--username",
+            "sean",
+            "--password-stdin",
+            "--currency",
+            "dollars",
+        ],
+        input=OWNER_PASSWORD + "\n",
+    )
+    assert result.exit_code != 0
+    assert "ISO 4217" in result.output
+    assert not _owner_exists(migrated_url)
 
 
 def test_init_rejects_weak_passwords(migrated_url: str) -> None:

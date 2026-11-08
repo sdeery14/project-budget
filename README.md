@@ -19,7 +19,7 @@ ProjectBudget consolidates the parts and tools your projects still need into one
 
 ```sh
 # Zero-infrastructure install, SQLite in ~/.projectbudget/
-uvx projectbudget init --username you   # creates the owner; prompts for a password
+uvx projectbudget init --username you   # creates the owner; prompts for a password; --currency EUR to change the default USD
 uvx projectbudget run                   # then sign in at http://127.0.0.1:8000/login
 
 # Or a single container with SQLite on a volume
@@ -30,7 +30,7 @@ docker exec -it projectbudget projectbudget init --username you
 uvx projectbudget run --demo
 ```
 
-There are no default credentials: the app serves only `/health` until `init` has run. Behind a reverse proxy, terminate TLS there and pass the `Host` header through; the session cookie is `Secure` by default (`PROJECTBUDGET_SECURE_COOKIES=false` relaxes that for plain HTTP on a trusted network). API tokens for scripts are created on the **API tokens** page and sent as `Authorization: Bearer ...` to `/api/v1`.
+There are no default credentials: the app serves only `/health` until `init` has run. `init` also fixes the workspace currency (USD unless `--currency` says otherwise); every price is an exact amount in that one currency (ADR-003). Behind a reverse proxy, terminate TLS there and pass the `Host` header through; the session cookie is `Secure` by default (`PROJECTBUDGET_SECURE_COOKIES=false` relaxes that for plain HTTP on a trusted network). API tokens for scripts are created on the **API tokens** page and sent as `Authorization: Bearer ...` to `/api/v1`.
 
 ## Roadmap
 

@@ -12,10 +12,11 @@ import typer
 import uvicorn
 
 from projectbudget import __version__
+from projectbudget.domain.money import InvalidCurrencyError, validate_currency
 from projectbudget.persistence import migrate
 from projectbudget.persistence.engine import UnsupportedDatabaseError, backend_name, make_engine
 from projectbudget.persistence.session import make_session_factory
-from projectbudget.services import auth, passwords
+from projectbudget.services import auth, passwords, workspace
 from projectbudget.settings import Settings
 
 app = typer.Typer(
@@ -77,10 +78,18 @@ def init(
             help="Read the password from standard input instead of prompting (for scripts).",
         ),
     ] = False,
+    currency: Annotated[
+        str,
+        typer.Option(help="Workspace currency as an ISO 4217 code; fixed after init (ADR-003)."),
+    ] = workspace.DEFAULT_CURRENCY,
 ) -> None:
-    """Create the owner account (ADR-005). Applies pending migrations first."""
+    """Create the owner account and set the workspace currency. Applies pending migrations first."""
     settings = _settings(ctx)
     url = settings.effective_database_url
+    try:
+        currency_code = validate_currency(currency)
+    except InvalidCurrencyError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--currency") from exc
     migrate.upgrade(url)
     engine = make_engine(url)
     try:
@@ -100,9 +109,10 @@ def init(
             owner = auth.create_owner(factory, username, password)
         except (auth.InvalidUsernameError, passwords.WeakPasswordError) as exc:
             raise typer.BadParameter(str(exc)) from exc
+        workspace.set_currency(factory, currency_code)
     finally:
         engine.dispose()
-    typer.echo(f"Owner {owner.username!r} created.")
+    typer.echo(f"Owner {owner.username!r} created. Workspace currency: {currency_code}.")
     typer.echo(
         f"Start the app with `projectbudget run` and sign in at "
         f"http://{settings.host}:{settings.port}/login"

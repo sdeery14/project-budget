@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
+from projectbudget.domain.principal import Principal
 from projectbudget.persistence import migrate, models  # noqa: F401  (registers tables)
 from projectbudget.persistence.base import Base
 from projectbudget.persistence.engine import backend_name, make_engine
@@ -103,6 +104,18 @@ def client(app_settings: Settings) -> Iterator[TestClient]:
 @pytest.fixture
 def owner(session_factory: SessionFactory) -> auth.OwnerInfo:
     return auth.create_owner(session_factory, OWNER_USERNAME, OWNER_PASSWORD)
+
+
+@pytest.fixture
+def principal(owner: auth.OwnerInfo) -> Principal:
+    """The owner acting through a browser session: may read and write."""
+    return Principal(owner_id=owner.id, username=owner.username, auth="session")
+
+
+@pytest.fixture
+def read_only_principal(owner: auth.OwnerInfo) -> Principal:
+    """The owner acting through a read-only API token."""
+    return Principal(owner_id=owner.id, username=owner.username, auth="token", read_only=True)
 
 
 def log_in(client: TestClient) -> None:

@@ -30,13 +30,15 @@ CI runs the same commands on both SQLite and PostgreSQL. A PR merges only when b
 ## Running the app locally
 
 ```sh
-uv run projectbudget init --username you   # applies migrations, creates the owner (prompts for a password)
+uv run projectbudget init --username you   # applies migrations, creates the owner (prompts for a password), sets the currency (--currency, default USD)
 uv run projectbudget run                   # http://127.0.0.1:8000/login
 ```
 
 Point `PROJECTBUDGET_DATABASE_URL` (or `--database-url`) at PostgreSQL to use that path instead. `projectbudget db revision -m "..."` drafts a migration from the models with the next sequential id; `db current`, `db upgrade` and `db downgrade` complete the set. The container runs `db upgrade` and then `run` on every start; create its owner with `docker exec -it <container> projectbudget init --username you`.
 
 Auth notes for anyone touching routers (ADR-005): every router except `/health`, `/login` and `/static` depends on `require_owner`, and `tests/test_routes_require_owner.py` walks the route table to prove it. State-changing requests need a same-origin `Origin` (or `Referer`) header and, when authenticated by cookie, the per-session CSRF token: the base layout puts it in an `X-CSRF-Token` header on every HTMX request, and plain forms carry a hidden `csrf_token` field. Templates must not use `hx-on`, `js:`, inline `<script>` or `style=` attributes; the CSP forbids them and `tests/test_templates_safe.py` greps for them. htmx is vendored under `src/projectbudget/web/static/vendor/htmx/` with its version and checksum.
+
+Service-layer notes (RFC v3 §3, ADR-005): every function in `src/projectbudget/services/` takes the session factory and a `Principal` first, then a frozen command dataclass, and returns a frozen info dataclass; routers and the CLI never touch ORM rows. Writes call `guards.require_write`, so a read-only API token is refused here even if a router forgot. Domain validation (`domain/catalog.py`, `domain/money.py`) runs before a transaction opens; anything that needs the database (slug taken, item missing, unit mismatch) is checked inside the one transaction that performs the write. Enumerations are `StrEnum`s stored as plain strings with `CHECK` constraints, never native enums (ADR-001).
 
 ## Conventions
 
