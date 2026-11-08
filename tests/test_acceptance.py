@@ -1,4 +1,4 @@
-"""RFC v3 §2 acceptance tests 1 to 4a (Milestone 1 and 2 gates), on the canonical fixture.
+"""RFC v3 §2 acceptance tests 1 to 5 (Milestone 1 to 3 gates), on the canonical fixture.
 
 Each is checked three ways: the service result, the JSON view and the HTML page,
 so the number a user sees is the number the API returns is the number the
@@ -10,11 +10,12 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
+from projectbudget.domain.catalog import PurchaseStatus
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.fixtures.canonical import CanonicalWorkspace, seed_canonical
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import backlog, forecast, purchases
+from projectbudget.services import backlog, forecast, purchases, transfer
 
 
 @pytest.fixture
@@ -172,3 +173,74 @@ def test_acceptance_4a_marking_purchased_removes_the_item_and_lowers_the_opening
     assert canonical.clamp.id not in {
         r["item_id"] for r in logged_in.get("/api/v1/backlog").json()["rows"]
     }
+
+
+def test_acceptance_4b_partial_receipt_leaves_the_remainder_on_order(
+    session_factory: SessionFactory,
+    principal: Principal,
+    canonical: CanonicalWorkspace,
+    logged_in: TestClient,
+) -> None:
+    """Order 2 clamps, receive 1: the backlog shows 1 in stock more, 1 still short, 1 on order."""
+    order = purchases.record_purchase(
+        session_factory,
+        principal,
+        purchases.PurchaseCreate(
+            lines=(purchases.PurchaseLineCreate(canonical.clamp.id, 2, Money(1250, "USD")),),
+            status=PurchaseStatus.ORDERED,
+            ordered_on=date(2026, 11, 8),
+        ),
+    )
+    purchases.receive_line(
+        session_factory, principal, order.lines[0].id, 1, occurred_on=date(2026, 11, 8)
+    )
+    row = next(
+        r
+        for r in backlog.get_backlog(session_factory, principal).rows
+        if r.item.id == canonical.clamp.id
+    )
+    assert (row.needed, row.on_hand, row.gross_shortfall, row.on_order, row.net_shortfall) == (
+        3,
+        2,
+        1,
+        1,
+        0,
+    )
+    api_row = next(
+        r
+        for r in logged_in.get("/api/v1/backlog").json()["rows"]
+        if r["item_id"] == canonical.clamp.id
+    )
+    assert (api_row["gross_shortfall"], api_row["on_order"]) == (1, 1)
+    page = logged_in.get("/backlog").text
+    clamp_row = _row_html(page, f'id="row-{canonical.clamp.id}"')
+    cells = [c for c in clamp_row.split("<td") if 'class="num"' in c]
+    assert "<strong>1</strong>" in clamp_row  # shortfall
+    assert any(">1</td>" in c for c in cells)  # on order
+    # Net shortfall 0: the forecast schedules nothing for the clamps while the order is open.
+    result = forecast.get_forecast(session_factory, principal, today=date(2026, 11, 8))
+    assert result is not None
+    assert canonical.clamp.id not in {i.item.item_id for i in result.conservative.items}
+
+
+def test_acceptance_5_export_wipe_import_reproduces_backlog_and_forecast(
+    session_factory: SessionFactory,
+    principal: Principal,
+    canonical: CanonicalWorkspace,
+    logged_in: TestClient,
+) -> None:
+    """Byte-equal backlog and forecast JSON under a frozen clock, with every id preserved."""
+    frozen = "2026-11-08"
+    before_backlog = logged_in.get("/api/v1/backlog").text
+    before_forecast = logged_in.get(f"/api/v1/forecast?today={frozen}").text
+    document = transfer.export_workspace(session_factory, principal)
+
+    transfer.wipe_workspace(session_factory, principal)
+    assert logged_in.get("/api/v1/backlog").json()["rows"] == []
+    assert logged_in.get(f"/api/v1/forecast?today={frozen}").status_code == 404
+
+    transfer.import_workspace(session_factory, principal, document)
+    assert logged_in.get("/api/v1/backlog").text == before_backlog
+    assert logged_in.get(f"/api/v1/forecast?today={frozen}").text == before_forecast
+    assert logged_in.get(f"/api/v1/projects/{canonical.workbench.id}").json()["name"] == "Workbench"
+    assert logged_in.get(f"/api/v1/requirements/{canonical.gate_hinges.id}").status_code == 200

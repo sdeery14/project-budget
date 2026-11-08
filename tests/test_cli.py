@@ -1,6 +1,9 @@
 """The ``projectbudget`` CLI drives the same migration and auth code as the app."""
 
+import json
 import os
+from datetime import date
+from pathlib import Path
 
 import pytest
 from sqlalchemy import delete
@@ -9,6 +12,7 @@ from typer.testing import CliRunner
 from conftest import OWNER_PASSWORD
 from projectbudget import __version__
 from projectbudget.cli.main import app
+from projectbudget.fixtures.canonical import seed_canonical
 from projectbudget.persistence import migrate
 from projectbudget.persistence.engine import make_engine
 from projectbudget.persistence.models import Owner
@@ -182,3 +186,50 @@ def test_init_applies_migrations_first(database_url: str) -> None:
             connection.execute(delete(Owner))
     finally:
         engine.dispose()
+
+
+def test_export_and_import_round_trip_through_the_cli(migrated_url: str, tmp_path: Path) -> None:
+    base = ["--database-url", migrated_url]
+    runner.invoke(
+        app, [*base, "init", "--username", "sean", "--password-stdin"], input=OWNER_PASSWORD + "\n"
+    )
+    engine = make_engine(migrated_url)
+    try:
+        factory = make_session_factory(engine)
+        seed_canonical(factory, auth.owner_principal(factory), as_of=date(2026, 11, 1))
+    finally:
+        engine.dispose()
+
+    out = tmp_path / "export.json"
+    result = runner.invoke(app, [*base, "export", "--output", str(out)])
+    assert result.exit_code == 0, result.output
+    document = json.loads(out.read_text(encoding="utf-8"))
+    assert document["format"] == "projectbudget-workspace"
+    assert len(document["catalog_items"]) == 4
+
+    to_stdout = runner.invoke(app, [*base, "export"])
+    assert to_stdout.exit_code == 0, to_stdout.output
+    assert json.loads(to_stdout.output)["currency"] == "USD"
+
+    refused = runner.invoke(app, [*base, "import", str(out)])
+    assert refused.exit_code == 1
+    assert "--replace" in refused.output
+
+    replaced = runner.invoke(app, [*base, "import", str(out), "--replace"])
+    assert replaced.exit_code == 0, replaced.output
+    assert "Imported 2 projects, 4 catalog items" in replaced.output
+    assert "previous data replaced" in replaced.output
+
+    bad = tmp_path / "bad.json"
+    bad.write_text("{}", encoding="utf-8")
+    invalid = runner.invoke(app, [*base, "import", str(bad)])
+    assert invalid.exit_code != 0
+    assert "Not a ProjectBudget export" in invalid.output
+    missing = runner.invoke(app, [*base, "import", str(tmp_path / "nope.json")])
+    assert missing.exit_code != 0
+
+
+def test_export_needs_an_owner(migrated_url: str) -> None:
+    result = runner.invoke(app, ["--database-url", migrated_url, "export"])
+    assert result.exit_code == 1
+    assert "projectbudget init" in result.output

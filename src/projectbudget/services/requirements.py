@@ -24,7 +24,7 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import CatalogItem, Requirement
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services.catalog import find_or_create_from_text, load_item
+from projectbudget.services.catalog import find_or_create_from_text, load_live_item
 from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import NotFoundError, require_write
 from projectbudget.services.projects import load_project
@@ -120,7 +120,7 @@ def _resolve_item(
     if (command.catalog_item_id is None) == (command.item_text is None):
         raise ItemReferenceError("Give either catalog_item_id or item_text, not both or neither")
     if command.catalog_item_id is not None:
-        item = load_item(db, command.catalog_item_id)
+        item = load_live_item(db, command.catalog_item_id)
     elif command.item_text is not None:
         item = find_or_create_from_text(db, command.item_text, unit=unit, now=now)
     if unit is not None and unit != item.unit:

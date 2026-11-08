@@ -9,6 +9,7 @@ from projectbudget.api.schemas import (
     CatalogItemPatch,
     EstimateIn,
     EstimateOut,
+    MergeIn,
     MovementOut,
 )
 from projectbudget.domain.money import Money
@@ -19,8 +20,18 @@ router = APIRouter(prefix="/catalog/items", tags=["catalog"], dependencies=[Depe
 
 
 @router.get("")
-def list_items(request: Request, principal: Owner) -> list[CatalogItemOut]:
-    return [CatalogItemOut.of(i) for i in catalog.list_items(session_factory(request), principal)]
+def list_items(
+    request: Request, principal: Owner, include_merged: bool = False
+) -> list[CatalogItemOut]:
+    rows = catalog.list_items(session_factory(request), principal, include_merged=include_merged)
+    return [CatalogItemOut.of(i) for i in rows]
+
+
+@router.post("/{item_id}/merge")
+def merge_item(request: Request, principal: Owner, item_id: str, body: MergeIn) -> CatalogItemOut:
+    """Fold this item into ``target_id``: every reference moves and this id becomes a redirect."""
+    info = catalog.merge_items(session_factory(request), principal, item_id, body.target_id)
+    return CatalogItemOut.of(info)
 
 
 @router.post("", status_code=201)

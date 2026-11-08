@@ -18,6 +18,7 @@ from projectbudget.api.forecast import router as forecast_router
 from projectbudget.api.projects import router as projects_router
 from projectbudget.api.purchases import router as purchases_router
 from projectbudget.api.requirements import router as requirements_router
+from projectbudget.api.transfer import router as transfer_router
 from projectbudget.domain.principal import AuthMethod
 from projectbudget.services import tokens
 from projectbudget.web.auth import Owner, require_owner, session_factory
@@ -109,3 +110,4 @@ router.include_router(backlog_router)
 router.include_router(budget_router)
 router.include_router(purchases_router)
 router.include_router(forecast_router)
+router.include_router(transfer_router)

@@ -118,6 +118,10 @@ class CatalogItem(Base):
     kind: Mapped[str] = mapped_column(String(20))
     unit: Mapped[str] = mapped_column(String(30))
     review_state: Mapped[str] = mapped_column(String(20))
+    merged_into_id: Mapped[str | None] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("catalog_items.id"), nullable=True, index=True
+    )
+    """Set when this item was merged into another: a redirect that keeps old slugs resolvable."""
     created_at: Mapped[datetime] = mapped_column(DateTime())
     updated_at: Mapped[datetime] = mapped_column(DateTime())
 
