@@ -8,8 +8,9 @@ start ``unreviewed``. A missing estimate is missing, never zero.
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.orm import Session
 
 from projectbudget.domain.catalog import (
@@ -25,7 +26,12 @@ from projectbudget.domain.catalog import (
 )
 from projectbudget.domain.money import CurrencyMismatchError, Money
 from projectbudget.domain.principal import Principal
-from projectbudget.persistence.models import CatalogItem, PriceEstimate, Requirement
+from projectbudget.persistence.models import (
+    CatalogItem,
+    InventoryMovement,
+    PriceEstimate,
+    Requirement,
+)
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services import workspace
 from projectbudget.services.clock import today, utcnow
@@ -151,10 +157,41 @@ def find_by_slug(db: Session, slug: str) -> CatalogItem | None:
 
 
 def _is_referenced(db: Session, item_id: str) -> bool:
-    """True when any requirement or price estimate is expressed in this item's unit."""
-    has_requirement = select(Requirement.id).where(Requirement.catalog_item_id == item_id).limit(1)
-    has_estimate = select(PriceEstimate.id).where(PriceEstimate.catalog_item_id == item_id).limit(1)
-    return db.scalar(has_requirement) is not None or db.scalar(has_estimate) is not None
+    """True when any requirement, price estimate or stock movement is expressed in this item's unit.
+
+    Movements count even when they net to zero: the history "received 10, used 10"
+    is in metres and must stay in metres.
+    """
+    probes = (
+        select(Requirement.id).where(Requirement.catalog_item_id == item_id),
+        select(PriceEstimate.id).where(PriceEstimate.catalog_item_id == item_id),
+        select(InventoryMovement.id).where(InventoryMovement.catalog_item_id == item_id),
+    )
+    return any(db.scalar(probe.limit(1)) is not None for probe in probes)
+
+
+def lock_item(db: Session, item_id: str) -> CatalogItem:
+    """Take a write lock on the item row for the rest of the transaction, then load it.
+
+    Stock checks are read-then-write ("is there enough? then record the movement"),
+    so two concurrent callers must not both read the same count. A no-op UPDATE of
+    the item row serialises them on both backends: PostgreSQL holds the row lock
+    until commit, and SQLite takes its database write lock at this statement, so
+    every read that follows sees the other writer's committed movements. The
+    lock must be taken before any read the decision depends on.
+    """
+    result = cast(
+        CursorResult[Any],
+        db.execute(
+            update(CatalogItem)
+            .where(CatalogItem.id == item_id)
+            .values(updated_at=CatalogItem.updated_at)
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    if result.rowcount == 0:
+        raise CatalogItemNotFoundError(item_id)
+    return load_item(db, item_id)
 
 
 def insert_item(db: Session, command: CatalogItemCreate, now: datetime) -> CatalogItem:
@@ -219,7 +256,7 @@ def update_item(
     name = validate_name(command.name) if command.name is not None else None
     unit = validate_unit(command.unit) if command.unit is not None else None
     with session_factory.begin() as db:
-        row = load_item(db, item_id)
+        row = lock_item(db, item_id) if unit is not None else load_item(db, item_id)
         if name is not None:
             row.name = name
         if command.kind is not None:

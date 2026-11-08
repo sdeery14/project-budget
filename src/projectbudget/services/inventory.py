@@ -26,7 +26,7 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import InventoryMovement
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services.catalog import load_item
+from projectbudget.services.catalog import load_item, lock_item
 from projectbudget.services.clock import today, utcnow
 from projectbudget.services.guards import require_write
 from projectbudget.services.requirements import load_requirement
@@ -182,7 +182,7 @@ def adjust(
         raise InvalidMovementError("An adjustment changes the count by a non-zero whole number")
     clean_note = _clean_note(note)
     with session_factory.begin() as db:
-        load_item(db, item_id)
+        lock_item(db, item_id)  # serialises against concurrent adjustments and consumption
         current = on_hand_in(db, item_id)
         if current + delta < 0:
             raise InsufficientOnHandError(item_id, current, -delta)
@@ -217,9 +217,12 @@ def consume(
         requirement = load_requirement(db, requirement_id)
         if requirement.intent != Intent.ACTIVE.value:
             raise RequirementNotActiveError(requirement_id, requirement.intent)
-        item = load_item(db, requirement.catalog_item_id)
+        item = lock_item(db, requirement.catalog_item_id)  # before any count is read
         if item.kind == ItemKind.REUSABLE.value and requirement.sharing == Sharing.SHARED.value:
             raise SharedReusableConsumptionError(requirement_id)
+        db.refresh(requirement)  # re-read qty and intent under the lock
+        if requirement.intent != Intent.ACTIVE.value:
+            raise RequirementNotActiveError(requirement_id, requirement.intent)
         already = consumed_by_requirement(db, [requirement_id]).get(requirement_id, 0)
         remaining = requirement.qty - already
         if wanted > remaining:
