@@ -1,5 +1,6 @@
 """``run --demo`` builds a throwaway, seeded SQLite workspace with a printed login (RFC v3 §3)."""
 
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -58,7 +59,11 @@ def test_prepare_demo_uses_a_fresh_temporary_directory_by_default() -> None:
 
 
 def test_run_help_documents_the_demo_flag() -> None:
-    result = runner.invoke(app, ["run", "--help"])
+    # Plain, wide output: rich otherwise styles and wraps option names in CI terminals.
+    result = runner.invoke(
+        app, ["run", "--help"], env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200"}
+    )
     assert result.exit_code == 0, result.output
-    assert "--demo" in result.output
-    assert "fictional" in result.output.lower()
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "--demo" in plain
+    assert "fictional" in plain.lower()
