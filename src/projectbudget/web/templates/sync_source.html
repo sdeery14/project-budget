@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Sync {{ source.label }} · ProjectBudget{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{{ source.label }} <span class="badge">{{ source.kind.value }}</span></h1>
+  <p class="muted"><a href="/sync">All sources</a>
+    {% if source.project_id %} · project <a href="/projects/{{ source.project_id }}">{{ source.project_name }}</a>{% endif %}
+    {% if source.last_revision %} · last applied revision <code>{{ source.last_revision[:12] }}</code>{% endif %}</p>
+  {% if error %}
+  <div class="alert error" role="alert"><p>{{ error }}</p>
+    {% if issues %}<ul>{% for issue in issues %}<li>{{ issue }}</li>{% endfor %}</ul>{% endif %}</div>
+  {% endif %}
+
+  {% if result %}
+  <div class="alert success" role="status">
+    {% if result.noop %}
+    <p><strong>Nothing to do.</strong> The source has the same content as the last applied run.</p>
+    {% else %}
+    <p><strong>Applied</strong> revision <code>{{ result.run.revision[:12] }}</code>:
+      {{ result.plan.counts.creates }} created, {{ result.plan.counts.updates }} updated,
+      {{ result.plan.counts.reactivations }} reactivated, {{ result.plan.counts.archives }} archived,
+      {{ result.plan.counts.rejects }} rejected.
+      {% if result.source.project_id %}<a href="/projects/{{ result.source.project_id }}">Open the project</a> · {% endif %}<a href="/backlog">Backlog</a></p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <h2>Preview</h2>
+  <form method="post" action="/sync/{{ source.id }}/preview" enctype="multipart/form-data" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if source.kind.value != "github" %}
+    <div class="grow"><label for="file">Upload instead of reading the file (optional)</label>
+      <input id="file" name="file" type="file" accept=".yaml,.yml,.csv,text/yaml,text/csv"></div>
+    {% endif %}
+    <label class="check"><input type="checkbox" name="force" value="true"> Show the plan even if the content is unchanged</label>
+    <button type="submit">Fetch and preview</button>
+  </form>
+
+  {% if preview %}
+    {% if preview.noop %}
+    <p class="alert" role="status">Same content as the last applied run (<code>{{ preview.fetched.content_hash[:12] }}</code>): nothing to do.</p>
+    {% else %}
+    {% set plan = preview.plan %}
+    <p class="muted">{{ preview.fetched.description }} · estimates dated {{ preview.fetched.as_of.isoformat() }} ·
+      project <strong>{{ plan.project_name }}</strong> (<code>{{ plan.project_id }}</code>)</p>
+    <ul class="kpi">
+      <li><span class="label">Create</span><span class="value">{{ plan.counts.creates }}</span></li>
+      <li><span class="label">Update</span><span class="value">{{ plan.counts.updates }}</span></li>
+      <li><span class="label">Reactivate</span><span class="value">{{ plan.counts.reactivations }}</span></li>
+      <li><span class="label">Archive</span><span class="value">{{ plan.counts.archives }}</span></li>
+      <li><span class="label">Reject</span><span class="value{% if plan.rejects %} neg{% endif %}">{{ plan.counts.rejects }}</span></li>
+      <li><span class="label">Unchanged</span><span class="value">{{ plan.counts.unchanged }}</span></li>
+    </ul>
+    <div class="table-wrap">
+    <table id="plan">
+      <thead><tr><th>Action</th><th>Item id</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for c in plan.creates %}
+        <tr><td><span class="badge ok">create</span></td><td><code>{{ c.external_id }}</code></td>
+          <td>{{ c.item.name }}: {{ c.item.qty }} {{ c.item.unit }}, P{{ c.item.priority }}, {{ c.item.kind.value }}
+            {% if c.catalog_exists %}→ existing catalog item <code>{{ c.slug }}</code>{% else %}→ new unreviewed item <code>{{ c.slug }}</code>{% endif %}
+            {% if c.estimate %}, estimate {{ c.estimate }}{% endif %}
+            {% if c.likely_rename_of %} <span class="badge warn">likely rename of {{ c.likely_rename_of }}</span>{% endif %}</td></tr>
+        {% endfor %}
+        {% for u in plan.updates %}
+        <tr><td><span class="badge ok">{{ "reactivate" if u.reactivate else "update" }}</span></td><td><code>{{ u.external_id }}</code></td>
+          <td>{% for ch in u.changes %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% if not loop.last %}, {% endif %}{% endfor %}
+            {% for ch in u.item_changes %}; item {{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endfor %}
+            {% if u.estimate %}; new estimate {{ u.estimate }}{% endif %}</td></tr>
+        {% endfor %}
+        {% for a in plan.archives %}
+        <tr><td><span class="badge warn">archive</span></td><td><code>{{ a.external_id }}</code></td><td>{{ a.item_name }}: removed from source; purchases and consumption stay</td></tr>
+        {% endfor %}
+        {% for r in plan.rejects %}
+        <tr><td><span class="badge warn">reject</span></td><td><code>{{ r.external_id }}</code></td><td>{{ r.reason }}</td></tr>
+        {% endfor %}
+        {% for r in plan.estimate_rejects %}
+        <tr><td><span class="badge warn">estimate rejected</span></td><td><code>{{ r.external_id }}</code></td><td>{{ r.reason }} (other fields apply)</td></tr>
+        {% endfor %}
+        {% if plan.empty and not plan.rejects %}
+        <tr><td colspan="3" class="muted">Everything already matches; applying would change nothing.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    </div>
+    {% if not plan.empty %}
+    <form method="post" action="/sync/{{ source.id }}/apply" class="row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="expected_content_hash" value="{{ preview.fetched.content_hash }}">
+      <input type="hidden" name="expected_plan_digest" value="{{ plan.digest }}">
+      {% if content_b64 %}<input type="hidden" name="content_b64" value="{{ content_b64 }}">{% endif %}
+      <input type="hidden" name="force" value="true">
+      <button type="submit">Apply this plan</button>
+    </form>
+    <p class="muted">Apply is one transaction. If the source or the workspace changed since this preview so that the plan would differ, apply refuses and asks for a new preview.</p>
+    {% endif %}
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Runs</h2>
+  <table id="runs">
+    <thead><tr><th>When (UTC)</th><th>Status</th><th>Revision</th><th>Summary</th></tr></thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td>{{ run.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td><span class="badge{% if run.status.value in ('rejected', 'failed') %} warn{% endif %}">{{ run.status.value }}</span></td>
+        <td>{% if run.revision %}<code>{{ run.revision[:12] }}</code>{% endif %}</td>
+        <td>{% for key, value in run.summary.items() %}{{ key }}: {{ value if value is not iterable or value is string else value | join("; ") }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No runs yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/sync/{{ source.id }}/detach" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="danger">Detach from source</button>
+  </form>
+  <p class="muted">Detaching removes the source and its runs; the project and its requirements stay and become manual.</p>
+</section>
+{% endblock %}

@@ -46,6 +46,8 @@ The forecast engine (`domain/forecast.py`) is a pure function of the plan, the b
 
 The export document (ADR-008) is defined by the pydantic models in `src/projectbudget/adapters/export_format.py`; `services/transfer.py` reads and writes it. Adding an entity means adding it to both and to `tests/test_transfer.py`, whose round trip compares backlog and forecast JSON byte for byte. `tests/fixtures/workspace.json` is an export of the canonical workspace; regenerate it with `uv run python scripts/make_fixture.py` when the seed changes.
 
+Sync (ADR-007) is split in three: `adapters/manifest.py` parses YAML and CSV into `domain/manifest.py` records with line-level errors, `adapters/sources.py` fetches from the import directory or `api.github.com` (the only host it will ever contact; the HTTP getter is injectable), and `domain/sync.py` is the pure diff engine whose every reconciliation rule is a test in `tests/test_sync_plan.py`. `services/sync.py` wires them and records every run. `docs/manifest.schema.json` is generated from the pydantic model by `uv run python scripts/make_manifest_schema.py`; a test fails when it is stale.
+
 The canonical fictional workspace is `src/projectbudget/fixtures/canonical.py`; tests, acceptance checks and the demo seed from it.
 
 ## Conventions

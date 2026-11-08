@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -99,6 +100,14 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200))
     archived: Mapped[bool] = mapped_column(Boolean())
     notes: Mapped[str] = mapped_column(Text())
+    source_id: Mapped[str | None] = mapped_column(
+        String(UUID_LENGTH),
+        ForeignKey("sync_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    """With ``source_id``: the manifest's project id (RFC v3 §4 source_ref)."""
     created_at: Mapped[datetime] = mapped_column(DateTime())
     updated_at: Mapped[datetime] = mapped_column(DateTime())
 
@@ -122,6 +131,13 @@ class CatalogItem(Base):
         String(UUID_LENGTH), ForeignKey("catalog_items.id"), nullable=True, index=True
     )
     """Set when this item was merged into another: a redirect that keeps old slugs resolvable."""
+    created_by_source_id: Mapped[str | None] = mapped_column(
+        String(UUID_LENGTH),
+        ForeignKey("sync_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    """The sync source that created this item; it owns kind and unit while the item is unreviewed."""
     created_at: Mapped[datetime] = mapped_column(DateTime())
     updated_at: Mapped[datetime] = mapped_column(DateTime())
 
@@ -135,6 +151,7 @@ class Requirement(Base):
         CheckConstraint("priority BETWEEN 1 AND 3", name="priority_range"),
         CheckConstraint("sharing IN ('shared', 'exclusive')", name="sharing"),
         CheckConstraint("intent IN ('active', 'paused', 'cancelled', 'archived')", name="intent"),
+        UniqueConstraint("source_id", "external_id", name="source_external"),
     )
 
     id: Mapped[str] = mapped_column(String(UUID_LENGTH), primary_key=True)
@@ -151,6 +168,14 @@ class Requirement(Base):
     archive_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sharing: Mapped[str] = mapped_column(String(20))
     notes: Mapped[str] = mapped_column(Text())
+    source_id: Mapped[str | None] = mapped_column(
+        String(UUID_LENGTH),
+        ForeignKey("sync_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    """With ``source_id``: the manifest item id. Identity for sync; names never identify."""
     created_at: Mapped[datetime] = mapped_column(DateTime())
     updated_at: Mapped[datetime] = mapped_column(DateTime())
 
@@ -301,3 +326,46 @@ class PurchaseLine(Base):
     qty: Mapped[int] = mapped_column(Integer())
     unit_price: Mapped[int] = mapped_column(BigInteger())
     received_qty: Mapped[int] = mapped_column(Integer())
+
+
+class SyncSource(Base):
+    """Where a project's manifest comes from: a file or CSV under the import directory, or GitHub."""
+
+    __tablename__ = "sync_sources"
+    __table_args__ = (CheckConstraint("kind IN ('file', 'csv', 'github')", name="kind"),)
+
+    id: Mapped[str] = mapped_column(String(UUID_LENGTH), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    locator: Mapped[str] = mapped_column(String(500))
+    """A path relative to the import directory, or ``owner/repo`` for GitHub."""
+    branch: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    """GitHub only: the file inside the repository (default project-budget.yaml)."""
+    external_project_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    """CSV only (a CSV has no project block); for YAML it is read from the manifest."""
+    token_env: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    """GitHub only: the name of an environment variable holding a read-only token. Never the token."""
+    last_revision: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_content_hash: Mapped[str | None] = mapped_column(String(SHA256_HEX_LENGTH), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime())
+    updated_at: Mapped[datetime] = mapped_column(DateTime())
+
+
+class SyncRun(Base):
+    """One attempt to pull a source: what revision it saw and how it ended."""
+
+    __tablename__ = "sync_runs"
+    __table_args__ = (
+        CheckConstraint("status IN ('applied', 'noop', 'rejected', 'failed')", name="status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(UUID_LENGTH), primary_key=True)
+    source_id: Mapped[str] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("sync_sources.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(20))
+    revision: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(SHA256_HEX_LENGTH), nullable=True)
+    summary: Mapped[str] = mapped_column(Text())
+    """Counts and messages as JSON text; the diff shown in the UI is recomputed, never stored."""
+    created_at: Mapped[datetime] = mapped_column(DateTime())

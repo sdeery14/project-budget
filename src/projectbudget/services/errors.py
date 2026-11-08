@@ -6,6 +6,7 @@ conflicts with what exists" (409). Everything else is a bug and stays a 500.
 """
 
 from projectbudget.adapters.export_format import InvalidDocumentError
+from projectbudget.adapters.sources import SourceFetchError
 from projectbudget.domain.catalog import (
     InvalidNameError,
     InvalidPriorityError,
@@ -13,6 +14,7 @@ from projectbudget.domain.catalog import (
     InvalidSlugError,
     InvalidUnitError,
 )
+from projectbudget.domain.manifest import ManifestError
 from projectbudget.domain.money import CurrencyMismatchError, InvalidCurrencyError, MoneyParseError
 from projectbudget.services.backlog import DuplicateOrderError
 from projectbudget.services.budget import InvalidOverrideError, InvalidPlanError
@@ -36,6 +38,12 @@ from projectbudget.services.requirements import (
     ItemReferenceError,
     UnitMismatchError,
 )
+from projectbudget.services.sync import (
+    InvalidSourceError,
+    ManifestRejectedError,
+    PlanChangedError,
+    SourceChangedError,
+)
 from projectbudget.services.transfer import ImportConflictError, WorkspaceNotEmptyError
 
 VALIDATION_ERRORS: tuple[type[Exception], ...] = (
@@ -58,6 +66,10 @@ VALIDATION_ERRORS: tuple[type[Exception], ...] = (
     InvalidPurchaseError,
     InvalidDocumentError,
     ImportConflictError,
+    InvalidSourceError,
+    SourceFetchError,
+    ManifestError,
+    ManifestRejectedError,
 )
 """Bad input: answer 422."""
 
@@ -68,6 +80,8 @@ CONFLICT_ERRORS: tuple[type[Exception], ...] = (
     MergedItemError,
     PurchaseStateError,
     WorkspaceNotEmptyError,
+    SourceChangedError,
+    PlanChangedError,
     SharedReusableConsumptionError,
     InsufficientOnHandError,
     OverConsumptionError,

@@ -1,6 +1,5 @@
-"""``projectbudget`` CLI: ``init``, ``run``, ``export``, ``import``, ``db ...``, ``version``.
+"""``projectbudget`` CLI: ``init``, ``run``, ``export``, ``import``, ``sync``, ``db ...``, ``version``.
 
-``sync`` arrives with Milestone 4.
 The container entrypoint runs ``db upgrade`` and then ``run`` (ADR-010).
 """
 
@@ -14,11 +13,12 @@ import uvicorn
 
 from projectbudget import __version__
 from projectbudget.adapters.export_format import InvalidDocumentError, parse_document
+from projectbudget.adapters.sources import SourceFetchError
 from projectbudget.domain.money import InvalidCurrencyError, validate_currency
 from projectbudget.persistence import migrate
 from projectbudget.persistence.engine import UnsupportedDatabaseError, backend_name, make_engine
 from projectbudget.persistence.session import make_session_factory
-from projectbudget.services import auth, passwords, transfer, workspace
+from projectbudget.services import auth, passwords, sync, transfer, workspace
 from projectbudget.settings import Settings
 
 app = typer.Typer(
@@ -185,6 +185,66 @@ def import_cmd(
         f"{summary.requirements} requirements, {summary.purchases} purchases"
         f"{' (previous data replaced)' if summary.replaced else ''}."
     )
+
+
+@app.command("sync")
+def sync_cmd(
+    ctx: typer.Context,
+    source_id: Annotated[
+        str, typer.Argument(help="A sync source id (see the Sync page or /api/v1/sync/sources).")
+    ],
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show the plan and change nothing.")
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Plan even when the content is unchanged since the last run."),
+    ] = False,
+) -> None:
+    """Pull a source's manifest, show the plan and apply it (ADR-007)."""
+    settings = _settings(ctx)
+    engine = make_engine(settings.effective_database_url)
+    try:
+        factory = make_session_factory(engine)
+        try:
+            principal = auth.owner_principal(factory)
+        except auth.NoOwnerError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+        import_dir = settings.effective_sync_import_dir
+        try:
+            if dry_run:
+                shown = sync.preview(
+                    factory, principal, source_id, import_dir=import_dir, force=force
+                )
+                plan = shown.plan
+                if shown.noop or plan is None:
+                    typer.echo("Nothing to do: same content as the last applied run.")
+                    return
+                typer.echo(f"Plan for {shown.fetched.description} (dry run, nothing applied):")
+            else:
+                result = sync.apply(
+                    factory, principal, source_id, import_dir=import_dir, force=force
+                )
+                plan = result.plan
+                if result.noop or plan is None:
+                    typer.echo("Nothing to do: same content as the last applied run.")
+                    return
+                typer.echo(f"Applied {result.run.revision}:")
+        except sync.ManifestRejectedError as exc:
+            typer.echo("Manifest rejected; nothing applied:", err=True)
+            for issue in exc.issues:
+                typer.echo(f"  {issue}", err=True)
+            raise typer.Exit(code=1) from exc
+        except (sync.SourceNotFoundError, sync.InvalidSourceError, SourceFetchError) as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+    finally:
+        engine.dispose()
+    for key, value in plan.counts.items():
+        typer.echo(f"  {key}: {value}")
+    for reject in (*plan.rejects, *plan.estimate_rejects):
+        typer.echo(f"  rejected {reject.external_id}: {reject.reason}")
 
 
 @app.command()

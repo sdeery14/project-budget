@@ -1,17 +1,26 @@
 """The RFC v3 §4 invariants that PR4a can already prove, each as a named test on both backends.
 
-Still to come with the sync PRs: same content hash is a no-op, a missing manifest
-entry archives. Foreign-key enforcement lives in test_engine.py; the merge invariant is
-proved in test_catalog_merge.py.
+Foreign-key enforcement lives in test_engine.py; the merge invariant is proved in
+test_catalog_merge.py; the sync invariants (same content hash is a no-op, a missing
+manifest entry archives and never deletes) are here and in test_acceptance_sync.py.
 """
 
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from projectbudget.domain.catalog import Intent, ItemKind, MovementReason
+from projectbudget.adapters.sources import FetchedManifest
+from projectbudget.domain.catalog import (
+    REMOVED_FROM_SOURCE,
+    Intent,
+    ItemKind,
+    MovementReason,
+    RunStatus,
+    SourceKind,
+)
 from projectbudget.domain.money import CurrencyMismatchError, Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import Requirement
@@ -23,6 +32,7 @@ from projectbudget.services import (
     projects,
     purchases,
     requirements,
+    sync,
     workspace,
 )
 
@@ -268,3 +278,66 @@ def test_a_purchase_never_implies_project_membership_but_consumption_does(
     used = inventory.consume(session_factory, principal, req.id, 3)
     assert used.requirement_id == req.id
     assert inventory.consumed(session_factory, principal, req.id) == 3
+
+
+MANIFEST_SYNC = """version: 1
+project: {id: shed, name: Shed}
+items:
+  - {id: screws, name: Deck screws, qty: 100}
+  - {id: saw, name: Hand saw, qty: 1, kind: reusable}
+"""
+
+
+def _sync_source(
+    session_factory: SessionFactory, principal: Principal, tmp_path: Path
+) -> sync.SourceInfo:
+    # Explicit LF so the bytes on disk equal the bytes an upload sends, on Windows too.
+    (tmp_path / "shed.yaml").write_text(MANIFEST_SYNC, encoding="utf-8", newline="\n")
+    return sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(SourceKind.FILE, "shed.yaml"),
+        import_dir=tmp_path,
+    )
+
+
+def test_same_content_hash_on_sync_is_a_noop(
+    session_factory: SessionFactory, principal: Principal, tmp_path: Path
+) -> None:
+    source = _sync_source(session_factory, principal, tmp_path)
+    first = sync.apply(session_factory, principal, source.id, import_dir=tmp_path)
+    assert first.run.status is RunStatus.APPLIED
+    before = backlog.get_backlog(session_factory, principal)
+    second = sync.apply(session_factory, principal, source.id, import_dir=tmp_path)
+    assert second.run.status is RunStatus.NOOP
+    assert second.run.content_hash == first.run.content_hash
+    assert backlog.get_backlog(session_factory, principal) == before
+    # The same bytes offered as an upload are the same content too.
+    upload = FetchedManifest.of(
+        MANIFEST_SYNC.encode("utf-8"), revision=None, as_of=NOW.date(), description="upload"
+    )
+    assert sync.apply(
+        session_factory, principal, source.id, import_dir=tmp_path, fetched=upload
+    ).noop
+
+
+def test_a_missing_manifest_entry_archives_and_never_deletes(
+    session_factory: SessionFactory, principal: Principal, tmp_path: Path
+) -> None:
+    source = _sync_source(session_factory, principal, tmp_path)
+    applied = sync.apply(session_factory, principal, source.id, import_dir=tmp_path)
+    project_id = applied.source.project_id or ""
+    before = requirements.list_requirements(session_factory, principal, project_id)
+    assert len(before) == 2
+    (tmp_path / "shed.yaml").write_text(
+        MANIFEST_SYNC.replace("  - {id: saw, name: Hand saw, qty: 1, kind: reusable}\n", ""),
+        encoding="utf-8",
+    )
+    sync.apply(session_factory, principal, source.id, import_dir=tmp_path)
+    after = requirements.list_requirements(
+        session_factory, principal, project_id, include_inactive=True
+    )
+    assert {r.id for r in after} == {r.id for r in before}  # no row disappeared
+    saw = next(r for r in after if r.qty == 1)
+    assert (saw.intent, saw.archive_reason) == (Intent.ARCHIVED, REMOVED_FROM_SOURCE)
+    assert len(requirements.list_requirements(session_factory, principal, project_id)) == 1

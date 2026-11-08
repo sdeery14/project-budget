@@ -6,6 +6,7 @@ caller says so). Owner, sessions and API tokens are not workspace data and are
 never part of the document.
 """
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -27,6 +28,8 @@ from projectbudget.persistence.models import (
     Purchase,
     PurchaseLine,
     Requirement,
+    SyncRun,
+    SyncSource,
     WorkspaceSettings,
 )
 from projectbudget.persistence.session import SessionFactory
@@ -36,6 +39,7 @@ from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import require_write
 
 WORKSPACE_TABLES = (
+    SyncRun,
     MonthOverride,
     BudgetPlan,
     BacklogOrder,
@@ -46,6 +50,7 @@ WORKSPACE_TABLES = (
     Requirement,
     CatalogItem,
     Project,
+    SyncSource,
 )
 """Every workspace table, children before parents."""
 
@@ -91,6 +96,8 @@ class ImportSummary:
     purchase_lines: int
     budget_plan: bool
     replaced: bool
+    sync_sources: int = 0
+    sync_runs: int = 0
 
 
 def export_workspace(
@@ -121,6 +128,8 @@ def export_workspace(
         ).all()
         plan = db.get(BudgetPlan, PLAN_ID)
         overrides = db.scalars(select(MonthOverride).order_by(MonthOverride.id)).all()
+        sources = db.scalars(select(SyncSource).order_by(SyncSource.id)).all()
+        runs = db.scalars(select(SyncRun).order_by(SyncRun.id)).all()
 
     lines_by_purchase: dict[str, list[fmt.PurchaseLineRecord]] = {}
     for line in lines:
@@ -143,6 +152,8 @@ def export_workspace(
                 name=p.name,
                 archived=p.archived,
                 notes=p.notes,
+                source_id=p.source_id,
+                external_id=p.external_id,
                 created_at=p.created_at,
                 updated_at=p.updated_at,
             )
@@ -157,6 +168,7 @@ def export_workspace(
                 unit=i.unit,
                 review_state=i.review_state,  # type: ignore[arg-type]
                 merged_into_id=i.merged_into_id,
+                created_by_source_id=i.created_by_source_id,
                 created_at=i.created_at,
                 updated_at=i.updated_at,
             )
@@ -174,6 +186,8 @@ def export_workspace(
                 archive_reason=r.archive_reason,
                 sharing=r.sharing,  # type: ignore[arg-type]
                 notes=r.notes,
+                source_id=r.source_id,
+                external_id=r.external_id,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
@@ -242,11 +256,39 @@ def export_workspace(
         )
         if plan is not None
         else None,
+        sync_sources=[
+            fmt.SyncSourceRecord(
+                id=s.id,
+                kind=s.kind,  # type: ignore[arg-type]
+                locator=s.locator,
+                branch=s.branch,
+                path=s.path,
+                external_project_id=s.external_project_id,
+                token_env=s.token_env,
+                last_revision=s.last_revision,
+                last_content_hash=s.last_content_hash,
+                created_at=s.created_at,
+                updated_at=s.updated_at,
+            )
+            for s in sources
+        ],
+        sync_runs=[
+            fmt.SyncRunRecord(
+                id=r.id,
+                source_id=r.source_id,
+                status=r.status,  # type: ignore[arg-type]
+                revision=r.revision,
+                content_hash=r.content_hash,
+                summary=json.loads(r.summary) if r.summary else {},
+                created_at=r.created_at,
+            )
+            for r in runs
+        ],
     )
 
 
 def _is_empty(db: Session) -> bool:
-    for table in (Project, CatalogItem, Purchase, InventoryMovement, BudgetPlan):
+    for table in (Project, CatalogItem, Purchase, InventoryMovement, BudgetPlan, SyncSource):
         if db.scalar(select(func.count()).select_from(table)):
             return False
     return True
@@ -309,6 +351,8 @@ def import_workspace(
                 purchase_lines=line_count,
                 budget_plan=document.budget_plan is not None,
                 replaced=not empty,
+                sync_sources=len(document.sync_sources),
+                sync_runs=len(document.sync_runs),
             )
     except IntegrityError as exc:
         raise ImportConflictError(
@@ -318,11 +362,30 @@ def import_workspace(
 
 def _insert_all(db: Session, doc: fmt.WorkspaceDocument, currency: str) -> None:
     db.add_all(
+        SyncSource(
+            id=s.id,
+            kind=s.kind.value,
+            locator=s.locator,
+            branch=s.branch,
+            path=s.path,
+            external_project_id=s.external_project_id,
+            token_env=s.token_env,
+            last_revision=s.last_revision,
+            last_content_hash=s.last_content_hash,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+        )
+        for s in doc.sync_sources
+    )
+    db.flush()
+    db.add_all(
         Project(
             id=p.id,
             name=p.name,
             archived=p.archived,
             notes=p.notes,
+            source_id=p.source_id,
+            external_id=p.external_id,
             created_at=p.created_at,
             updated_at=p.updated_at,
         )
@@ -338,6 +401,7 @@ def _insert_all(db: Session, doc: fmt.WorkspaceDocument, currency: str) -> None:
             unit=i.unit,
             review_state=i.review_state.value,
             merged_into_id=None,
+            created_by_source_id=i.created_by_source_id,
             created_at=i.created_at,
             updated_at=i.updated_at,
         )
@@ -364,6 +428,8 @@ def _insert_all(db: Session, doc: fmt.WorkspaceDocument, currency: str) -> None:
             archive_reason=r.archive_reason,
             sharing=r.sharing.value,
             notes=r.notes,
+            source_id=r.source_id,
+            external_id=r.external_id,
             created_at=r.created_at,
             updated_at=r.updated_at,
         )
@@ -455,4 +521,16 @@ def _insert_all(db: Session, doc: fmt.WorkspaceDocument, currency: str) -> None:
             )
             for o in plan.overrides
         )
+    db.add_all(
+        SyncRun(
+            id=r.id,
+            source_id=r.source_id,
+            status=r.status.value,
+            revision=r.revision,
+            content_hash=r.content_hash,
+            summary=json.dumps(r.summary, sort_keys=True),
+            created_at=r.created_at,
+        )
+        for r in doc.sync_runs
+    )
     db.flush()
