@@ -1,10 +1,11 @@
-"""``projectbudget`` CLI: ``db upgrade|downgrade|current|revision``, ``run``, ``version``.
+"""``projectbudget`` CLI: ``init``, ``run``, ``db upgrade|downgrade|current|revision``, ``version``.
 
-``init``, ``export``, ``import`` and ``sync`` arrive with their milestones.
+``export``, ``import`` and ``sync`` arrive with their milestones.
 The container entrypoint runs ``db upgrade`` and then ``run`` (ADR-010).
 """
 
 import os
+import sys
 from typing import Annotated
 
 import typer
@@ -12,7 +13,9 @@ import uvicorn
 
 from projectbudget import __version__
 from projectbudget.persistence import migrate
-from projectbudget.persistence.engine import UnsupportedDatabaseError, backend_name
+from projectbudget.persistence.engine import UnsupportedDatabaseError, backend_name, make_engine
+from projectbudget.persistence.session import make_session_factory
+from projectbudget.services import auth, passwords
 from projectbudget.settings import Settings
 
 app = typer.Typer(
@@ -59,6 +62,51 @@ def _settings(ctx: typer.Context) -> Settings:
 def version() -> None:
     """Print the installed version."""
     typer.echo(__version__)
+
+
+@app.command()
+def init(
+    ctx: typer.Context,
+    username: Annotated[
+        str, typer.Option(prompt=True, help="Owner username (stored lower-case, no spaces).")
+    ],
+    password_stdin: Annotated[
+        bool,
+        typer.Option(
+            "--password-stdin",
+            help="Read the password from standard input instead of prompting (for scripts).",
+        ),
+    ] = False,
+) -> None:
+    """Create the owner account (ADR-005). Applies pending migrations first."""
+    settings = _settings(ctx)
+    url = settings.effective_database_url
+    migrate.upgrade(url)
+    engine = make_engine(url)
+    try:
+        factory = make_session_factory(engine)
+        if auth.owner_exists(factory):
+            typer.echo("An owner already exists; this instance is initialised.", err=True)
+            raise typer.Exit(code=1)
+        if password_stdin:
+            password = sys.stdin.readline().rstrip("\r\n")
+        else:
+            password = typer.prompt(
+                f"Password (at least {passwords.MIN_PASSWORD_LENGTH} characters)",
+                hide_input=True,
+                confirmation_prompt=True,
+            )
+        try:
+            owner = auth.create_owner(factory, username, password)
+        except (auth.InvalidUsernameError, passwords.WeakPasswordError) as exc:
+            raise typer.BadParameter(str(exc)) from exc
+    finally:
+        engine.dispose()
+    typer.echo(f"Owner {owner.username!r} created.")
+    typer.echo(
+        f"Start the app with `projectbudget run` and sign in at "
+        f"http://{settings.host}:{settings.port}/login"
+    )
 
 
 @app.command()

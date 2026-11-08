@@ -15,6 +15,7 @@ from alembic.operations.ops import MigrationScript
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 
+from projectbudget.persistence import models  # noqa: F401  (registers tables on Base)
 from projectbudget.persistence.base import Base
 from projectbudget.persistence.engine import make_engine
 

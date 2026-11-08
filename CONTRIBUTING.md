@@ -30,11 +30,13 @@ CI runs the same commands on both SQLite and PostgreSQL. A PR merges only when b
 ## Running the app locally
 
 ```sh
-uv run projectbudget db upgrade   # apply migrations (SQLite in ~/.projectbudget by default)
-uv run projectbudget run          # http://127.0.0.1:8000/health
+uv run projectbudget init --username you   # applies migrations, creates the owner (prompts for a password)
+uv run projectbudget run                   # http://127.0.0.1:8000/login
 ```
 
-Point `PROJECTBUDGET_DATABASE_URL` (or `--database-url`) at PostgreSQL to use that path instead. `projectbudget db revision -m "..."` drafts a migration from the models with the next sequential id; `db current` and `db downgrade` complete the set. The container runs `db upgrade` and then `run` on every start.
+Point `PROJECTBUDGET_DATABASE_URL` (or `--database-url`) at PostgreSQL to use that path instead. `projectbudget db revision -m "..."` drafts a migration from the models with the next sequential id; `db current`, `db upgrade` and `db downgrade` complete the set. The container runs `db upgrade` and then `run` on every start; create its owner with `docker exec -it <container> projectbudget init --username you`.
+
+Auth notes for anyone touching routers (ADR-005): every router except `/health`, `/login` and `/static` depends on `require_owner`, and `tests/test_routes_require_owner.py` walks the route table to prove it. State-changing requests need a same-origin `Origin` (or `Referer`) header and, when authenticated by cookie, the per-session CSRF token: the base layout puts it in an `X-CSRF-Token` header on every HTMX request, and plain forms carry a hidden `csrf_token` field. Templates must not use `hx-on`, `js:`, inline `<script>` or `style=` attributes; the CSP forbids them and `tests/test_templates_safe.py` greps for them. htmx is vendored under `src/projectbudget/web/static/vendor/htmx/` with its version and checksum.
 
 ## Conventions
 

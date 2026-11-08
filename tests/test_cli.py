@@ -1,13 +1,19 @@
-"""The ``projectbudget`` CLI drives the same migration code as the container."""
+"""The ``projectbudget`` CLI drives the same migration and auth code as the app."""
 
 import os
 
 import pytest
+from sqlalchemy import delete
 from typer.testing import CliRunner
 
+from conftest import OWNER_PASSWORD
 from projectbudget import __version__
 from projectbudget.cli.main import app
 from projectbudget.persistence import migrate
+from projectbudget.persistence.engine import make_engine
+from projectbudget.persistence.models import Owner
+from projectbudget.persistence.session import make_session_factory
+from projectbudget.services import auth
 
 runner = CliRunner()
 
@@ -39,6 +45,10 @@ def test_db_upgrade_current_downgrade(database_url: str) -> None:
     assert result.output.startswith("base")
     assert "db upgrade" in result.output
 
+    # Leave the shared database migrated for the tests that follow.
+    result = runner.invoke(app, ["--database-url", database_url, "db", "upgrade"])
+    assert result.exit_code == 0, result.output
+
 
 def test_unsupported_backend_is_a_usage_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PROJECTBUDGET_DATABASE_URL", raising=False)
@@ -59,3 +69,64 @@ def test_run_help_mentions_single_worker() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0, result.output
     assert "one worker" in result.output
+
+
+def _owner_exists(url: str) -> bool:
+    engine = make_engine(url)
+    try:
+        return auth.owner_exists(make_session_factory(engine))
+    finally:
+        engine.dispose()
+
+
+def test_init_creates_the_owner_once(migrated_url: str) -> None:
+    base = ["--database-url", migrated_url, "init", "--username", "Sean"]
+    result = runner.invoke(app, [*base, "--password-stdin"], input=OWNER_PASSWORD + "\n")
+    assert result.exit_code == 0, result.output
+    assert "Owner 'sean' created" in result.output
+    assert "/login" in result.output
+    assert _owner_exists(migrated_url)
+
+    again = runner.invoke(app, [*base, "--password-stdin"], input=OWNER_PASSWORD + "\n")
+    assert again.exit_code == 1
+    assert "already exists" in again.output
+
+
+def test_init_prompts_and_confirms_the_password(migrated_url: str) -> None:
+    result = runner.invoke(
+        app,
+        ["--database-url", migrated_url, "init", "--username", "sean"],
+        input=f"{OWNER_PASSWORD}\n{OWNER_PASSWORD}\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert OWNER_PASSWORD not in result.output
+    assert _owner_exists(migrated_url)
+
+
+def test_init_rejects_weak_passwords(migrated_url: str) -> None:
+    result = runner.invoke(
+        app,
+        ["--database-url", migrated_url, "init", "--username", "sean", "--password-stdin"],
+        input="short\n",
+    )
+    assert result.exit_code != 0
+    assert "at least" in result.output
+    assert not _owner_exists(migrated_url)
+
+
+def test_init_applies_migrations_first(database_url: str) -> None:
+    runner.invoke(app, ["--database-url", database_url, "db", "downgrade", "base"])
+    result = runner.invoke(
+        app,
+        ["--database-url", database_url, "init", "--username", "sean", "--password-stdin"],
+        input=OWNER_PASSWORD + "\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert migrate.current_revision(database_url) == migrate.head_revision()
+    # Clean up the row this test created outside the migrated_url fixture.
+    engine = make_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(delete(Owner))
+    finally:
+        engine.dispose()

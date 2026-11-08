@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Setup required · ProjectBudget{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Setup required</h1>
+  <p>This instance has no owner yet, so it refuses to serve anything but this page and
+  <code>/health</code>. Create the owner on the machine that runs the app:</p>
+  <pre>projectbudget init --username you</pre>
+  <p>In a container: <code>docker exec -it &lt;container&gt; projectbudget init --username you</code>.
+  Then reload this page.</p>
+</section>
+{% endblock %}

@@ -8,13 +8,18 @@ def test_upgrade_from_empty_matches_models_and_downgrades_one_step(database_url:
     assert migrate.current_revision(database_url) is None
 
     migrate.upgrade(database_url, "head")
-    assert migrate.current_revision(database_url) == migrate.head_revision()
+    head = migrate.head_revision()
+    assert migrate.current_revision(database_url) == head
 
     # Autogenerate must produce no diff: the migrations fully describe the models.
     assert migrate.pending_model_changes(database_url) == []
 
     migrate.downgrade(database_url, "-1")
-    assert migrate.current_revision(database_url) is None
+    assert migrate.current_revision(database_url) != head
+
+    # Leave the shared database migrated for the tests that follow.
+    migrate.upgrade(database_url, "head")
+    assert migrate.current_revision(database_url) == head
 
 
 def test_head_revision_is_sequential() -> None:
