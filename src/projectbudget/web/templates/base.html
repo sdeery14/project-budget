@@ -10,6 +10,7 @@
   {% block scripts %}{% endblock %}
 </head>
 <body{% if csrf_token %} hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endif %}>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <a class="brand" href="/">ProjectBudget</a>
     {% if principal %}

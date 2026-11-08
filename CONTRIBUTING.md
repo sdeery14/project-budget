@@ -67,4 +67,4 @@ Copy `docs/adr/000-template.md` to the next number, fill in Context, Decision an
 
 ## Releasing
 
-Versions come from git tags. Tagging `vX.Y.Z` on `main` publishes the PyPI package and the GHCR image (ADR-010). The release checklist lives in the RFC's Milestone 5 and includes a backup restore drill.
+Versions come from git tags. Tagging `vX.Y.Z` on `main` runs `.github/workflows/release.yml`, which publishes the PyPI package (trusted publishing), the GHCR image and a GitHub Release with the matching `CHANGELOG.md` section (ADR-010). The checklist, including the restore drill and the fresh-clone check, is `docs/release.md`. Add a line to `CHANGELOG.md` under Unreleased with every user-visible change.

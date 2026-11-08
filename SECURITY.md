@@ -13,11 +13,11 @@ Include what you found, how to reproduce it, and what you think the impact is. Y
 
 ## Supported versions
 
-Nothing is released yet. Once releases exist, the latest minor version receives security fixes.
+The latest released minor version (0.1.x) receives security fixes. Upgrade with `pipx upgrade projectbudget`, by re-running `uvx projectbudget`, or by pulling the new container image.
 
 ## What V1 commits to
 
-The V1 release gate (RFC v3, section 7) requires, among other things:
+The threat model is in `docs/threat-model.md`. The V1 release gate (RFC v3, section 7) requires, among other things:
 
 - No default credentials; the app refuses to serve until an owner is created.
 - Argon2id password hashing, database-backed sessions, CSRF protection, login rate limiting.

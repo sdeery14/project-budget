@@ -1,10 +1,11 @@
-"""``projectbudget`` CLI: ``init``, ``run``, ``export``, ``import``, ``sync``, ``db ...``, ``version``.
+"""``projectbudget`` CLI: ``init``, ``run``, ``export``, ``import``, ``sync``, ``backup``, ``db ...``, ``version``.
 
 The container entrypoint runs ``db upgrade`` and then ``run`` (ADR-010).
 """
 
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -14,8 +15,9 @@ import uvicorn
 from projectbudget import __version__
 from projectbudget.adapters.export_format import InvalidDocumentError, parse_document
 from projectbudget.adapters.sources import SourceFetchError
+from projectbudget.cli import demo as demo_mode
 from projectbudget.domain.money import InvalidCurrencyError, validate_currency
-from projectbudget.persistence import migrate
+from projectbudget.persistence import backup, migrate
 from projectbudget.persistence.engine import UnsupportedDatabaseError, backend_name, make_engine
 from projectbudget.persistence.session import make_session_factory
 from projectbudget.services import auth, passwords, sync, transfer, workspace
@@ -257,12 +259,25 @@ def run(
     reload: Annotated[
         bool, typer.Option(help="Restart on code changes (development only).")
     ] = False,
+    demo: Annotated[
+        bool,
+        typer.Option(
+            "--demo",
+            help="Serve a throwaway SQLite workspace seeded with fictional data; the login is printed.",
+        ),
+    ] = False,
 ) -> None:
     """Start the HTTP server with one worker (ADR-002, ADR-010)."""
     settings = _settings(ctx)
+    database_url = settings.effective_database_url
+    if demo:
+        workspace = demo_mode.prepare_demo()
+        database_url = workspace.database_url
+        typer.echo(f"Demo workspace in {workspace.directory} (delete the folder when done).")
+        typer.echo(f"Sign in as {workspace.username!r} with password: {workspace.password}")
     # uvicorn --factory builds the app in its own process (always so with --reload), and
     # that process reads settings from the environment, so hand it the resolved URL.
-    os.environ[DATABASE_URL_ENV] = settings.effective_database_url
+    os.environ[DATABASE_URL_ENV] = database_url
     uvicorn.run(
         "projectbudget.web.app:create_app",
         factory=True,
@@ -273,6 +288,30 @@ def run(
         proxy_headers=True,
         log_level="info",
     )
+
+
+@app.command("backup")
+def backup_cmd(
+    ctx: typer.Context,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Target file; default: <data dir>/backups/projectbudget-<timestamp>.sqlite",
+        ),
+    ] = None,
+) -> None:
+    """Write a consistent copy of the SQLite database with VACUUM INTO (RFC v3 §7)."""
+    settings = _settings(ctx)
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    target = output or settings.data_dir / "backups" / f"projectbudget-{stamp}.sqlite"
+    try:
+        written = backup.backup_sqlite(settings.effective_database_url, target)
+    except backup.BackupError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"Backup written to {written}")
 
 
 @db_app.command("upgrade")
