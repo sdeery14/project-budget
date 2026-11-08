@@ -171,3 +171,45 @@ class PriceEstimate(Base):
     confidence: Mapped[str] = mapped_column(String(10))
     origin: Mapped[str] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(DateTime())
+
+
+class InventoryMovement(Base):
+    """A fact about stock: received, consumed against a requirement, or an adjustment.
+
+    On-hand is the sum of ``delta_qty``; consumption is the allocation to a project.
+    ``purchase_line_id`` arrives with purchases (PR5).
+    """
+
+    __tablename__ = "inventory_movements"
+    __table_args__ = (
+        CheckConstraint("reason IN ('received', 'consumed', 'adjustment')", name="reason"),
+        CheckConstraint("delta_qty <> 0", name="delta_nonzero"),
+    )
+
+    id: Mapped[str] = mapped_column(String(UUID_LENGTH), primary_key=True)
+    catalog_item_id: Mapped[str] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("catalog_items.id"), index=True
+    )
+    delta_qty: Mapped[int] = mapped_column(Integer())
+    reason: Mapped[str] = mapped_column(String(20))
+    requirement_id: Mapped[str | None] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("requirements.id"), nullable=True, index=True
+    )
+    occurred_on: Mapped[date] = mapped_column(Date())
+    note: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime())
+
+
+class BacklogOrder(Base):
+    """The workspace-level backlog order (ADR-004): one position per catalog item.
+
+    The RFC lists this as ``backlog_order[]`` on the budget plan; arrays are outside
+    the dialect-neutral subset (ADR-001), so it is a child table keyed by item.
+    """
+
+    __tablename__ = "backlog_order"
+
+    catalog_item_id: Mapped[str] = mapped_column(
+        String(UUID_LENGTH), ForeignKey("catalog_items.id", ondelete="CASCADE"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer())

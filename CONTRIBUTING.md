@@ -40,6 +40,10 @@ Auth notes for anyone touching routers (ADR-005): every router except `/health`,
 
 Service-layer notes (RFC v3 §3, ADR-005): every function in `src/projectbudget/services/` takes the session factory and a `Principal` first, then a frozen command dataclass, and returns a frozen info dataclass; routers and the CLI never touch ORM rows. Writes call `guards.require_write`, so a read-only API token is refused here even if a router forgot. Domain validation (`domain/catalog.py`, `domain/money.py`) runs before a transaction opens; anything that needs the database (slug taken, item missing, unit mismatch) is checked inside the one transaction that performs the write. Enumerations are `StrEnum`s stored as plain strings with `CHECK` constraints, never native enums (ADR-001).
 
+Router notes (ADR-002): HTML pages live in `src/projectbudget/web/pages/` and their JSON twins in `src/projectbudget/api/`; both call the same service functions and contain no business logic. Request and response models for the API are in `api/schemas.py`; money crosses that boundary as a decimal string plus an integer minor-unit field, never a float. User-caused service errors are grouped in `services/errors.py`: validation errors answer 422, conflicts with existing state answer 409, missing records 404, read-only tokens 403, wired once in `web/errors.py`. Pages catch the same group to re-render the form with the message. HTMX fragments are returned for requests carrying `HX-Request`; the htmx config in `base.html` swaps 422 responses so an error row replaces the row that caused it.
+
+The canonical fictional workspace is `src/projectbudget/fixtures/canonical.py`; tests, acceptance checks and the demo seed from it.
+
 ## Conventions
 
 - **Branch from `main`, squash-merge back.** The PR title becomes the commit message, so write it as a [conventional commit](https://www.conventionalcommits.org/): `feat(domain): add Money`, `fix(sync): ...`, `docs: ...`, `chore(ci): ...`.

@@ -1,0 +1,47 @@
+{% set r = row.requirement %}
+<tr id="requirement-{{ r.id }}"{% if r.intent.value != "active" %} class="muted"{% endif %}>
+  <td>
+    <a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a>
+    <span class="badge">{{ row.item.kind.value }}</span>
+    {% if r.notes %}<div class="muted">{{ r.notes }}</div>{% endif %}
+    {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+  </td>
+  <td class="num">{{ r.qty }} {{ row.item.unit }}</td>
+  <td><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td>
+  <td>{{ r.sharing.value if row.item.kind.value == "reusable" else "—" }}</td>
+  <td>{{ r.intent.value }}{% if r.archive_reason %} <span class="muted">({{ r.archive_reason }})</span>{% endif %}</td>
+  <td class="num">{{ row.consumed }}</td>
+  <td class="num">{{ row.on_hand }}</td>
+  <td class="actions">
+    {% if r.intent.value == "active" %}
+      <form method="post" action="/requirements/{{ r.id }}/intent" hx-post="/requirements/{{ r.id }}/intent" hx-target="closest tr" hx-swap="outerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="intent" value="paused">
+        <button type="submit" class="secondary">Pause</button>
+      </form>
+      <form method="post" action="/requirements/{{ r.id }}/intent" hx-post="/requirements/{{ r.id }}/intent" hx-target="closest tr" hx-swap="outerHTML"
+            hx-confirm="Cancel this requirement? It leaves the backlog but keeps its history.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="intent" value="cancelled">
+        <button type="submit" class="danger">Cancel</button>
+      </form>
+      {% if row.can_consume %}
+      <form method="post" action="/requirements/{{ r.id }}/consume" hx-post="/requirements/{{ r.id }}/consume" hx-target="closest tr" hx-swap="outerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="check">Use <input name="qty" type="number" min="1" max="{{ [row.remaining, row.on_hand] | min }}" value="1" aria-label="Quantity to consume"> from stock</label>
+        <button type="submit" class="secondary">Consume</button>
+      </form>
+      {% endif %}
+    {% else %}
+      <form method="post" action="/requirements/{{ r.id }}/intent" hx-post="/requirements/{{ r.id }}/intent" hx-target="closest tr" hx-swap="outerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="intent" value="active">
+        <button type="submit" class="secondary">Reactivate</button>
+      </form>
+      {% if r.intent.value != "archived" %}
+      <form method="post" action="/requirements/{{ r.id }}/intent" hx-post="/requirements/{{ r.id }}/intent" hx-target="closest tr" hx-swap="outerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="intent" value="archived">
+        <input type="hidden" name="archive_reason" value="Archived by owner">
+        <button type="submit" class="secondary">Archive</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </td>
+</tr>

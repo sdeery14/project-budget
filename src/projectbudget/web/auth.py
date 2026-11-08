@@ -7,9 +7,9 @@ must run before any route, including login.
 """
 
 from datetime import timedelta
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import Request, Response
+from fastapi import Depends, Request, Response
 
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
@@ -140,3 +140,7 @@ def clear_session_cookie(response: Response, settings: Settings) -> None:
         secure=settings.secure_cookies,
         samesite="lax",
     )
+
+
+Owner = Annotated[Principal, Depends(require_owner)]
+"""Route parameter type: the authenticated owner. Also used as a router-level dependency."""

@@ -1,18 +1,25 @@
-"""``/api/v1``: who am I, API tokens, and the OpenAPI document (ADR-002, ADR-005)."""
+"""``/api/v1``: who am I, API tokens, the domain routers and the OpenAPI document.
+
+Every state-changing page action has a twin here (RFC v3 §3, ADR-002). The
+domain routers live in their own modules; this one wires them under one prefix
+and one owner dependency.
+"""
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from projectbudget.domain.principal import AuthMethod, Principal
+from projectbudget.api.backlog import router as backlog_router
+from projectbudget.api.catalog import router as catalog_router
+from projectbudget.api.projects import router as projects_router
+from projectbudget.api.requirements import router as requirements_router
+from projectbudget.domain.principal import AuthMethod
 from projectbudget.services import tokens
-from projectbudget.web.auth import require_owner, session_factory
+from projectbudget.web.auth import Owner, require_owner, session_factory
 
 router = APIRouter(prefix="/api/v1", tags=["api"], dependencies=[Depends(require_owner)])
-
-Owner = Annotated[Principal, Depends(require_owner)]
 
 
 class MeOut(BaseModel):
@@ -90,3 +97,9 @@ def openapi_document(request: Request) -> dict[str, Any]:
     """The schema, behind owner auth. Swagger UI stays off: it needs a CDN the CSP forbids."""
     schema: dict[str, Any] = request.app.openapi()
     return schema
+
+
+router.include_router(projects_router)
+router.include_router(catalog_router)
+router.include_router(requirements_router)
+router.include_router(backlog_router)

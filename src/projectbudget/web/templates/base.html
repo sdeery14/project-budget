@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ProjectBudget{% endblock %}</title>
-  <meta name="htmx-config" content='{"allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "includeIndicatorStyles": false}'>
+  <meta name="htmx-config" content='{"allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "includeIndicatorStyles": false, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}]}'>
   <link rel="stylesheet" href="{{ request.url_for('static', path='app.css') }}">
   <script src="{{ request.url_for('static', path='vendor/htmx/htmx.min.js') }}" defer></script>
 </head>
@@ -13,7 +13,9 @@
     <a class="brand" href="/">ProjectBudget</a>
     {% if principal %}
     <nav aria-label="Main">
-      <a href="/">Home</a>
+      <a href="/backlog">Backlog</a>
+      <a href="/projects">Projects</a>
+      <a href="/catalog">Catalog</a>
       <a href="/settings/tokens">API tokens</a>
       <form method="post" action="/logout" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

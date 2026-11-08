@@ -55,7 +55,7 @@ h1 { font-size: 1.5rem; margin-top: 0; }
 
 form label { display: block; margin-top: 0.75rem; font-weight: 600; }
 form label.check { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 400; }
-input[type="text"], input[type="password"] {
+input[type="text"], input[type="password"], input[type="number"], input[type="date"], select, textarea {
   width: 100%; padding: 0.5rem 0.6rem; margin-top: 0.25rem;
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
 }
@@ -69,6 +69,12 @@ form.inline { display: inline; }
 form.row { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin-bottom: 1.5rem; }
 form.row label { margin-top: 0; }
 form.row input[type="text"] { width: 16rem; }
+form.row input[type="number"] { width: 6rem; }
+form.row input[type="date"] { width: 11rem; }
+form.row select { width: auto; }
+form.row textarea { width: 100%; }
+form.row .grow { flex: 1 1 12rem; }
+form.row .grow input[type="text"] { width: 100%; }
 form.row button { margin-top: 0; }
 
 table { width: 100%; border-collapse: collapse; }
@@ -85,3 +91,24 @@ th { color: var(--muted); font-weight: 600; font-size: 0.875rem; }
 /* HTMX indicator styles are not injected (CSP); define the one class used. */
 .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+
+/* Backlog and detail pages */
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.num { text-align: right; }
+.kpi { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0 0 1rem; padding: 0; list-style: none; }
+.kpi li { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.75rem; }
+.kpi .label { display: block; color: var(--muted); font-size: 0.8rem; }
+.kpi .value { font-size: 1.25rem; font-weight: 600; }
+.badge { display: inline-block; padding: 0 0.4rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.75rem; color: var(--muted); }
+.badge.p1 { color: var(--danger); border-color: var(--danger); }
+.badge.p2 { color: var(--accent); border-color: var(--accent); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.actions form { display: inline; }
+.actions button, button.small { margin: 0; padding: 0.2rem 0.5rem; font-size: 0.85rem; }
+button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+.table-wrap { overflow-x: auto; }
+details.assumptions { margin: 1rem 0; }
+details.assumptions summary { cursor: pointer; color: var(--muted); }
+section.card + section.card { margin-top: 1.5rem; }
+.stack { display: grid; gap: 0.75rem; }
+form.stack label { margin-top: 0; }

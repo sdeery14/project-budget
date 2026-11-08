@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · ProjectBudget{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{{ project.name }}{% if project.archived %} <span class="badge">archived</span>{% endif %}</h1>
+  {% if project.notes %}<p>{{ project.notes }}</p>{% endif %}
+  <p><a href="/projects">All projects</a> · <a href="/backlog">Backlog</a></p>
+  <form method="post" action="/projects/{{ project.id }}/archive" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="archived" value="{{ 'false' if project.archived else 'true' }}">
+    <button type="submit" class="secondary small">{{ "Restore project" if project.archived else "Archive project" }}</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Add a requirement</h2>
+  {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/projects/{{ project.id }}/requirements" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grow">
+      <label for="item_text">Item</label>
+      <input id="item_text" name="item_text" type="text" maxlength="200" list="catalog-names"
+             placeholder="type a name, e.g. M8 carriage bolt">
+      <datalist id="catalog-names">
+        {% for item in items %}<option value="{{ item.name }}">{% endfor %}
+      </datalist>
+    </div>
+    <div>
+      <label for="catalog_item_id">or pick</label>
+      <select id="catalog_item_id" name="catalog_item_id">
+        <option value="">from catalog…</option>
+        {% for item in items %}<option value="{{ item.id }}">{{ item.name }} ({{ item.unit }})</option>{% endfor %}
+      </select>
+    </div>
+    <div><label for="qty">Qty</label><input id="qty" name="qty" type="number" min="1" value="1" required></div>
+    <div><label for="unit">Unit</label><input id="unit" name="unit" type="text" maxlength="30" placeholder="each"></div>
+    <div>
+      <label for="priority">Priority</label>
+      <select id="priority" name="priority">
+        <option value="1">P1 urgent</option><option value="2" selected>P2</option><option value="3">P3 later</option>
+      </select>
+    </div>
+    <div>
+      <label for="sharing">Sharing</label>
+      <select id="sharing" name="sharing">
+        <option value="shared" selected>shared (tool moves between projects)</option>
+        <option value="exclusive">exclusive (stays with this project)</option>
+      </select>
+    </div>
+    <button type="submit">Add</button>
+  </form>
+  <p class="muted">A typed name that is not in the catalog creates an unreviewed consumable item. Sharing
+  applies to reusable items only.</p>
+</section>
+
+<section class="card">
+  <h2>Requirements</h2>
+  <div class="table-wrap">
+  <table id="requirements">
+    <thead>
+      <tr><th>Item</th><th class="num">Qty</th><th>Priority</th><th>Sharing</th><th>Intent</th><th class="num">Consumed</th><th class="num">On hand</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        {% include "partials/requirement_row.html" %}
+      {% else %}
+      <tr><td colspan="8" class="muted">Nothing needed yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
