@@ -218,6 +218,26 @@ def test_blocked_until_the_balance_recovers() -> None:
     assert stuck.conservative.items[0].status == "blocked"
 
 
+def test_a_reserve_the_contribution_covers_is_not_a_debt_and_not_blocked() -> None:
+    """#21: balance 0, reserve 100, contribution 350: month 1 buys; spendable is 0, not -100."""
+    rows = backlog(("pump", 1, "39.00"))
+    result = forecast(plan("0.00", reserve="100.00", contribution="350.00"), rows, usd("0"), TODAY)
+    sched = result.conservative
+    assert sched.opening_balance == usd("-100.00")  # the arithmetic is unchanged
+    assert sched.spendable == usd("0.00")
+    assert sched.reserve_shortfall == usd("100.00")
+    assert not sched.blocked
+    assert sched.recovery_month is None  # nothing to recover from
+    assert sched.months[0].blocked is False
+    assert [p.item.item_id for p in sched.months[0].purchases] == ["pump"]
+    assert sched.months[0].closing == usd("211.00")
+    assert sched.items[0].month == NOV
+
+    covered = forecast(plan("250.00", reserve="100.00"), backlog(), usd("0"), TODAY)
+    assert covered.conservative.spendable == usd("150.00")
+    assert covered.conservative.reserve_shortfall == usd("0.00")
+
+
 def test_balance_may_be_stale_after_sixty_days() -> None:
     fresh = forecast(plan(as_of=date(2026, 9, 9)), backlog(), usd("0"), TODAY)
     assert fresh.balance_stale is False  # exactly 60 days

@@ -128,11 +128,34 @@ class Schedule:
     items: tuple[ItemOutcome, ...]
     """Every queued item in queue order, scheduled or not."""
     recovery_month: date | None
-    """When a negative opening balance first came back to zero or more; None if it never did."""
+    """The first month that can buy again after a blocked first month; None when the first
+    month is not blocked, or when the balance never comes back within the horizon."""
 
     @property
     def blocked(self) -> bool:
-        return self.opening_balance.amount < 0
+        """The first month cannot buy anything: its balance after the contribution is still
+        below zero. A negative opening that the month's own contribution covers is not
+        blocked; the reserve is a floor, not a debt (#21)."""
+        return bool(self.months) and self.months[0].blocked
+
+    @property
+    def spendable(self) -> Money:
+        """What can be spent before this month's contribution: the opening balance floored at
+        zero. A reserve that is not yet fully covered shows as 0, never as a debt."""
+        return (
+            self.opening_balance
+            if self.opening_balance.amount >= 0
+            else Money.zero(self.opening_balance.currency)
+        )
+
+    @property
+    def reserve_shortfall(self) -> Money:
+        """How much of the reserve the balance does not cover yet (zero when it is covered)."""
+        return (
+            -self.opening_balance
+            if self.opening_balance.amount < 0
+            else Money.zero(self.opening_balance.currency)
+        )
 
     @property
     def scheduled(self) -> tuple[ItemOutcome, ...]:
@@ -223,7 +246,7 @@ def schedule(
             opening + plan.monthly_contribution + sum_money((o.delta for o in overrides), currency)
         )
         blocked = balance.amount < 0
-        if opening_balance.amount < 0 and recovery is None and not blocked:
+        if months and months[0].blocked and recovery is None and not blocked:
             recovery = month
         bought: list[ScheduledPurchase] = []
         if not blocked:
@@ -255,10 +278,9 @@ def schedule(
             remaining = []
             break
 
+    first_blocked = bool(months) and months[0].blocked
     for item in remaining:
-        status: ItemStatus = (
-            "blocked" if recovery is None and opening_balance.amount < 0 else "beyond_horizon"
-        )
+        status: ItemStatus = "blocked" if first_blocked and recovery is None else "beyond_horizon"
         outcomes[item.item_id] = _unscheduled(item, status, today, contingency_pct)
 
     return Schedule(
@@ -310,7 +332,7 @@ def extend_through(sched: Schedule, plan: BudgetPlan, month_count: int) -> Sched
             + sum_money((o.delta for o in overrides), plan.currency)
         )
         blocked = closing.amount < 0
-        if sched.opening_balance.amount < 0 and recovery is None and not blocked:
+        if sched.blocked and recovery is None and not blocked:
             recovery = month
         months.append(
             MonthRecord(

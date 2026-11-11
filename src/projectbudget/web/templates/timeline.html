@@ -23,15 +23,19 @@
   {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
 
   <ul class="kpi">
-    <li><span class="label">Opening balance this month</span>
-      <span class="value{% if c.opening_balance.is_negative %} neg{% endif %}" id="opening-balance">{{ c.opening_balance }} {{ currency }}</span></li>
-    <li><span class="label">Spent since {{ forecast.plan.balance_as_of.isoformat() }}</span>
-      <span class="value" id="recent-purchases">{{ forecast.recent_purchases_total }} {{ currency }}</span></li>
+    <li><span class="label">Spendable before this month's contribution</span>
+      <span class="value" id="spendable-now">{{ c.spendable }} {{ currency }}</span></li>
+    <li><span class="label">Protected reserve</span>
+      <span class="value" id="protected-reserve">{{ forecast.plan.protected_reserve }} {{ currency }}</span></li>
     <li><span class="label">Scheduled (conservative{% if forecast.lower_bound %}, lower bound{% endif %})</span>
       <span class="value" id="scheduled-total">{{ c.scheduled_total }} {{ currency }}</span></li>
     <li><span class="label">Items</span>
       <span class="value">{{ c.scheduled | length }} scheduled · {{ c.unscheduled | length }} not</span></li>
   </ul>
+  <p class="muted" id="balance-basis">Balance {{ forecast.plan.earmarked_funds }} {{ currency }} as of {{ forecast.plan.balance_as_of.isoformat() }}
+    {%- if forecast.recent_purchases_total.amount > 0 %}, less <span id="recent-purchases">{{ forecast.recent_purchases_total }} {{ currency }}</span> spent since{% endif %}
+    {%- if c.reserve_shortfall.amount > 0 %}; the reserve is short by <span id="reserve-shortfall">{{ c.reserve_shortfall }} {{ currency }}</span>, which
+    {%- if c.blocked %} the monthly contribution does not cover yet{% else %} this month's contribution covers first{% endif %}{% endif %}.</p>
 
   {% if forecast.lower_bound %}
   <p class="alert warning" role="status">{{ forecast.unpriced_count }} item{{ "s" if forecast.unpriced_count != 1 else "" }} without a price.
@@ -43,8 +47,8 @@
     <a href="/budget">Re-enter it</a>.</p>
   {% endif %}
   {% if c.blocked %}
-  <p class="alert error" role="status">Timeline blocked: the balance after the reserve and recent purchases is below zero.
-    {% if c.recovery_month %}It recovers in {{ c.recovery_month.strftime("%B %Y") }}.{% else %}It does not recover within the horizon at current inputs.{% endif %}</p>
+  <p class="alert {% if c.recovery_month %}warning{% else %}error{% endif %}" role="status" id="blocked-banner">
+    {% if c.recovery_month %}Nothing can be bought before {{ c.recovery_month.strftime("%B %Y") }}: until then the balance stays below the reserve even after each month's contribution.{% else %}Timeline blocked: the balance stays below the reserve for the whole horizon at current inputs, so nothing can be bought.{% endif %}</p>
   {% endif %}
   {% if c.unscheduled | selectattr("status", "equalto", "not_fundable") | list %}
   <p class="alert error" role="status">Not fundable at current inputs: the monthly contribution is zero or less and the balance does not cover the next item.</p>
@@ -111,7 +115,7 @@
       {% for month in c.months %}
       <tr id="month-{{ month.month.isoformat() }}"{% if month.blocked %} class="blocked"{% endif %}>
         <td data-label="Month"><span>{{ month.month.strftime("%b %Y") }}{% if month.blocked %} <span class="badge warn">blocked</span>{% endif %}{% if month.stale %} <span class="badge stale">stale</span>{% endif %}</span></td>
-        <td class="money{% if month.opening.is_negative %} neg{% endif %}" data-label="Opening">{{ month.opening }}</td>
+        <td class="money{% if month.opening.is_negative and month.blocked %} neg{% endif %}" data-label="Opening"{% if month.opening.is_negative and not month.blocked %} title="Below zero only by the reserve; this month's contribution covers it"{% endif %}>{{ month.opening }}</td>
         <td class="money" data-label="Contribution">{{ month.contribution }}</td>
         <td data-label="Overrides">{% if month.overrides %}<ul class="inline-list">{% for ov in month.overrides %}<li>{{ ov.delta }} {{ ov.label }}</li>{% endfor %}</ul>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td data-label="Purchases">{% if month.purchases %}<ul class="inline-list">{% for p in month.purchases %}<li>{{ p.item.name }} x {{ p.item.qty }}: {{ p.cost }}</li>{% endfor %}</ul>{% else %}<span class="muted">—</span>{% endif %}</td>

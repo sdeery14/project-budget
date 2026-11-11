@@ -628,8 +628,16 @@ class ItemOutcomeOut(BaseModel):
 
 class ScheduleOut(BaseModel):
     contingency_pct: int
-    opening_balance: MoneyOut
-    blocked: bool
+    opening_balance: MoneyOut = Field(
+        description="Balance less reserve less purchases since balance_as_of; may be negative."
+    )
+    spendable: MoneyOut = Field(description="opening_balance floored at zero (#21).")
+    reserve_shortfall: MoneyOut = Field(
+        description="How much of the reserve is not covered yet; zero when it is."
+    )
+    blocked: bool = Field(
+        description="The first month cannot buy: its balance after the contribution is below zero."
+    )
     recovery_month: date | None
     scheduled_total: MoneyOut
     months: list[MonthOut]
@@ -640,6 +648,8 @@ class ScheduleOut(BaseModel):
         return cls(
             contingency_pct=sched.contingency_pct,
             opening_balance=MoneyOut.of(sched.opening_balance),
+            spendable=MoneyOut.of(sched.spendable),
+            reserve_shortfall=MoneyOut.of(sched.reserve_shortfall),
             blocked=sched.blocked,
             recovery_month=sched.recovery_month,
             scheduled_total=MoneyOut.of(sched.scheduled_total),

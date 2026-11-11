@@ -94,8 +94,10 @@ def test_timeline_page_explains_each_month_and_draws_the_chart(
     page = logged_in.get(f"/timeline?today={TODAY}")
     assert page.status_code == 200
     text = page.text
-    assert 'id="opening-balance"' in text
-    assert "70.00 USD" in text
+    assert 'id="spendable-now">70.00 USD' in text
+    assert 'id="protected-reserve">80.00 USD' in text
+    assert 'id="blocked-banner"' not in text
+    assert 'id="reserve-shortfall"' not in text
     assert 'id="month-2026-11-01"' in text
     assert 'id="month-2027-01-01"' in text
     assert "Bar clamp 600 mm x 2: 27.50" in text
@@ -111,6 +113,54 @@ def test_timeline_page_explains_each_month_and_draws_the_chart(
     assert "static/timeline.js" in text
     assert (STATIC_DIR / "timeline.js").exists()
     assert logged_in.get("/static/vendor/chartjs/chart.umd.js").status_code == 200
+
+
+def test_a_reserve_shortfall_is_a_note_not_a_red_negative(
+    logged_in: TestClient, canonical: CanonicalWorkspace
+) -> None:
+    """#21: the owner's plan: balance 0, reserve 100, contribution 350."""
+    csrf = csrf_token_from(logged_in.get("/budget").text)
+    saved = logged_in.post(
+        "/budget",
+        data={
+            "csrf_token": csrf,
+            "earmarked_funds": "0.00",
+            "balance_as_of": "2026-11-01",
+            "protected_reserve": "100.00",
+            "monthly_contribution": "350.00",
+            "horizon_months": "12",
+            "contingency_pct": "10",
+        },
+    )
+    assert saved.status_code in (200, 303), saved.text
+    text = logged_in.get(f"/timeline?today={TODAY}").text
+    assert 'id="spendable-now">0.00 USD' in text
+    assert 'class="value neg"' not in text
+    assert 'class="money neg"' not in text  # the month table keeps the arithmetic, not the red
+    assert "Below zero only by the reserve" in text
+    assert 'id="reserve-shortfall">100.00 USD' in text
+    assert "this month's contribution covers first" in text
+    assert 'id="blocked-banner"' not in text
+    assert "Bar clamp 600 mm x 2: 27.50" in text  # November buys
+
+    # The same plan with a contribution that cannot cover the reserve this month: a plain
+    # warning naming the first month that can buy, not an error that contradicts the table.
+    logged_in.post(
+        "/budget",
+        data={
+            "csrf_token": csrf,
+            "earmarked_funds": "0.00",
+            "balance_as_of": "2026-11-01",
+            "protected_reserve": "100.00",
+            "monthly_contribution": "60.00",
+            "horizon_months": "12",
+            "contingency_pct": "0",
+        },
+    )
+    text = logged_in.get(f"/timeline?today={TODAY}").text
+    assert 'id="blocked-banner"' in text
+    assert "Nothing can be bought before December 2026" in text
+    assert "the monthly contribution does not cover yet" in text
 
 
 def test_mark_purchased_from_the_timeline(
