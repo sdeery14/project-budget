@@ -401,6 +401,44 @@ def test_a_manual_requirement_for_the_same_item_is_adopted_not_duplicated() -> N
     assert not plan.empty
 
 
+def test_repeated_catalog_items_adopt_the_manual_rows_in_project_order() -> None:
+    """Two manifest items for one catalog item take two manual rows; nothing is created twice."""
+    plan = plan_sync(
+        ctx(
+            item("front", "Hose clamp", 3, catalog="hose-clamp"),
+            item("rear", "Hose clamp", 4, catalog="hose-clamp"),
+            catalog={"hose-clamp": state("hose-clamp", "Hose clamp", mine=False)},
+            manual=(
+                manual("req-1", "item-hose-clamp", "Hose clamp", 2, sort_order=0),
+                manual("req-2", "item-hose-clamp", "Hose clamp", 7, sort_order=1),
+            ),
+            attached=True,
+        )
+    )
+    assert [(a.requirement_id, a.external_id) for a in plan.adoptions] == [
+        ("req-1", "front"),
+        ("req-2", "rear"),
+    ]
+    assert [[(c.field, c.old, c.new) for c in a.changes] for a in plan.adoptions] == [
+        [("qty", 2, 3)],
+        [("qty", 7, 4)],
+    ]
+    assert plan.creates == ()
+
+    # One manual row, two manifest items: the second is a create, the first an adoption.
+    one = plan_sync(
+        ctx(
+            item("front", "Hose clamp", 3, catalog="hose-clamp"),
+            item("rear", "Hose clamp", 4, catalog="hose-clamp"),
+            catalog={"hose-clamp": state("hose-clamp", "Hose clamp", mine=False)},
+            manual=(manual("req-1", "item-hose-clamp", "Hose clamp", 2),),
+            attached=True,
+        )
+    )
+    assert [a.external_id for a in one.adoptions] == ["front"]
+    assert [c.external_id for c in one.creates] == ["rear"]
+
+
 def test_adoption_still_rejects_a_kind_or_unit_the_source_does_not_own() -> None:
     plan = plan_sync(
         ctx(

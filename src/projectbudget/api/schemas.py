@@ -95,6 +95,7 @@ class ProjectOut(BaseModel):
             notes=info.notes,
             created_at=info.created_at,
             updated_at=info.updated_at,
+            source_id=info.source_id,
         )
 
 

@@ -1,6 +1,9 @@
 """The sync service: sources, preview, apply, no-op, rejects, archive and reappear, ownership, runs."""
 
+import contextlib
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -408,6 +411,51 @@ def test_attaching_a_source_to_a_hand_built_project_adopts_matching_requirements
             ),
             import_dir=import_dir,
         )
+
+
+def test_two_concurrent_attachments_to_one_project_cannot_both_succeed(
+    session_factory: SessionFactory,
+    principal: Principal,
+    import_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The project row is locked before its attachment is checked (review finding on #44)."""
+    project = projects.create_project(
+        session_factory, principal, projects.ProjectCreate(name="Heater"), now=NOW
+    )
+    barrier = threading.Barrier(2)
+    real_lock = sync._lock_project
+
+    def paused(db: object, project_id: str) -> object:
+        # Both requests arrive at the lock together; the loser must then see the winner's write.
+        with contextlib.suppress(threading.BrokenBarrierError):
+            barrier.wait(timeout=1.5)
+        return real_lock(db, project_id)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(sync, "_lock_project", paused)
+
+    def attempt(_: int) -> str:
+        try:
+            sync.create_source(
+                session_factory,
+                principal,
+                sync.SourceCreate(
+                    kind=SourceKind.FILE,
+                    locator="heater/project-budget.yaml",
+                    project_id=project.id,
+                ),
+                import_dir=import_dir,
+            )
+        except sync.InvalidSourceError as exc:
+            return "refused" if "already synced" in str(exc) else f"other: {exc}"
+        return "ok"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = sorted(pool.map(attempt, range(2)))
+    assert results == ["ok", "refused"]
+    attached = [s for s in sync.list_sources(session_factory, principal) if s.project_id]
+    assert len(attached) == 1
+    assert projects.get_project(session_factory, principal, project.id).source_id == attached[0].id
 
 
 def test_an_unattached_source_warns_about_a_project_with_the_same_name(

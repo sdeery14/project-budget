@@ -24,6 +24,38 @@ def _settings(client: TestClient) -> Settings:
     return settings
 
 
+def test_a_source_can_be_attached_to_a_project_and_the_project_says_so(
+    logged_in: TestClient,
+) -> None:
+    headers = _csrf(logged_in)
+    import_dir = _settings(logged_in).effective_sync_import_dir
+    import_dir.mkdir(parents=True, exist_ok=True)
+    (import_dir / "shed.yaml").write_text(MANIFEST, encoding="utf-8")
+    project = logged_in.post("/api/v1/projects", json={"name": "Shed by hand"}, headers=headers)
+    assert project.status_code == 201, project.text
+    assert project.json()["source_id"] is None
+    project_id = project.json()["id"]
+
+    created = logged_in.post(
+        "/api/v1/sync/sources",
+        json={"kind": "file", "locator": "shed.yaml", "project_id": project_id},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    source = created.json()
+    assert (source["project_id"], source["project_name"]) == (project_id, "Shed by hand")
+    assert logged_in.get(f"/api/v1/projects/{project_id}").json()["source_id"] == source["id"]
+    assert logged_in.get("/api/v1/projects").json()[0]["source_id"] == source["id"]
+
+    again = logged_in.post(
+        "/api/v1/sync/sources",
+        json={"kind": "file", "locator": "shed.yaml", "project_id": project_id},
+        headers=headers,
+    )
+    assert again.status_code == 422
+    assert "already synced" in again.text
+
+
 def test_sources_preview_apply_runs_and_detach(logged_in: TestClient) -> None:
     headers = _csrf(logged_in)
     import_dir = _settings(logged_in).effective_sync_import_dir

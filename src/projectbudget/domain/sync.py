@@ -252,12 +252,11 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
     rejects: list[Reject] = []
     estimate_rejects: list[Reject] = []
     unchanged: list[str] = []
-    # The first hand-entered requirement per catalog item is the one a manifest item adopts;
-    # any further one for the same item stays manual.
-    manual_by_item: dict[str, ManualRequirement] = {}
+    # Hand-entered requirements per catalog item, in project order. Each manifest item that
+    # maps to the item adopts the next unused one; whatever is left stays manual.
+    manual_by_item: dict[str, list[ManualRequirement]] = {}
     for req in ctx.manual:
-        manual_by_item.setdefault(req.catalog_item_id, req)
-    adopted: set[str] = set()
+        manual_by_item.setdefault(req.catalog_item_id, []).append(req)
     # What each slug will look like once this plan applies: (kind, unit, external id that set it).
     # A later item in the same manifest that disagrees is a conflict, never a silent reuse.
     pending: dict[str, tuple[ItemKind, str, str]] = {}
@@ -316,9 +315,9 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
         pending.setdefault(slug, (effective[0], effective[1], item.id))
 
         if existing is None:
-            manual = manual_by_item.get(state.id) if state is not None else None
-            if manual is not None and manual.id not in adopted:
-                adopted.add(manual.id)
+            unused = manual_by_item.get(state.id) if state is not None else None
+            if unused:
+                manual = unused.pop(0)
                 taken = []
                 if manual.qty != item.qty:
                     taken.append(FieldChange("qty", manual.qty, item.qty))

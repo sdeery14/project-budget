@@ -70,7 +70,7 @@ from projectbudget.services.catalog import (
 )
 from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import NotFoundError, require_write
-from projectbudget.services.projects import load_project
+from projectbudget.services.projects import ProjectNotFoundError
 
 TOKEN_ENV_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,99}$")
 LOCATOR_MAX_LENGTH = 500
@@ -274,7 +274,8 @@ def create_source(
     with session_factory.begin() as db:
         project: Project | None = None
         if command.project_id:
-            project = load_project(db, command.project_id)
+            # Lock first, then check: two attachments to one project must not both pass.
+            project = _lock_project(db, command.project_id)
             if project.source_id is not None:
                 raise InvalidSourceError(
                     f"Project {project.name!r} is already synced from a source; detach that first"
@@ -505,6 +506,25 @@ def _context(
         attached=project is not None,
         same_name_projects=same_name,
     )
+
+
+def _lock_project(db: Session, project_id: str) -> Project:
+    """Serialise attachments to one project (same device as ``catalog.lock_item``)."""
+    result = cast(
+        CursorResult[Any],
+        db.execute(
+            update(Project)
+            .where(Project.id == project_id)
+            .values(updated_at=Project.updated_at)
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    if result.rowcount == 0:
+        raise ProjectNotFoundError(project_id)
+    row = db.get(Project, project_id)
+    assert row is not None  # the UPDATE just matched it  # noqa: S101
+    db.refresh(row)
+    return row
 
 
 def _lock_source(db: Session, source_id: str) -> SyncSource:
