@@ -236,10 +236,10 @@ def test_acceptance_4b_partial_receipt_leaves_the_remainder_on_order(
             ordered_on=date(2026, 11, 8),
         ),
     )
-    result = backlog.get_backlog(session_factory, principal)
-    assert result.unpriced == ()
-    assert not result.is_lower_bound
-    assert result.committed == Money(3250, "USD")
+    after = backlog.get_backlog(session_factory, principal)
+    assert after.unpriced == ()
+    assert not after.is_lower_bound
+    assert after.committed == Money(3250, "USD")
     page = logged_in.get("/backlog").text
     hinge_row = _row_html(page, f'id="row-{canonical.hinge_set.id}"')
     assert ">on order</span>" in hinge_row
