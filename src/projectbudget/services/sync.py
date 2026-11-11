@@ -522,7 +522,8 @@ def _lock_project(db: Session, project_id: str) -> Project:
     if result.rowcount == 0:
         raise ProjectNotFoundError(project_id)
     row = db.get(Project, project_id)
-    assert row is not None  # the UPDATE just matched it  # noqa: S101
+    if row is None:  # pragma: no cover - the UPDATE just matched it
+        raise ProjectNotFoundError(project_id)
     db.refresh(row)
     return row
 
