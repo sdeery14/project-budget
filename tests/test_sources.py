@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from projectbudget.adapters import sources
-from projectbudget.adapters.sources import GitHubClient, SourceFetchError
+from projectbudget.adapters.sources import GitHubClient, GitHubNotFoundError, SourceFetchError
 
 
 def test_fetch_file_hashes_content_and_dates_estimates_by_mtime(tmp_path: Path) -> None:
@@ -137,6 +137,28 @@ def test_github_answers_that_are_not_what_we_expect() -> None:
 
     with pytest.raises(SourceFetchError, match="not a file"):
         GitHubClient(Directory()).fetch("o/r", branch=None, path=None, token=None)
+
+
+def test_a_404_from_github_is_its_own_error_other_statuses_are_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub says 404 for a private repository without a token; the service explains it (#29)."""
+    import urllib.error
+
+    class Answering:
+        def __init__(self, code: int) -> None:
+            self.code = code
+
+        def open(self, request: object, timeout: float) -> object:
+            raise urllib.error.HTTPError("https://api.github.com/x", self.code, "nope", {}, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(sources, "_https_opener", lambda: Answering(404))
+    with pytest.raises(GitHubNotFoundError, match="404 for /repos/o/r/commits"):
+        sources.default_getter("https://api.github.com/repos/o/r/commits?per_page=1", {})
+    monkeypatch.setattr(sources, "_https_opener", lambda: Answering(403))
+    with pytest.raises(SourceFetchError, match="403") as caught:
+        sources.default_getter("https://api.github.com/repos/o/r/commits?per_page=1", {})
+    assert not isinstance(caught.value, GitHubNotFoundError)
 
 
 def test_default_getter_only_talks_to_api_github_com() -> None:

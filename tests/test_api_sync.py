@@ -56,6 +56,43 @@ def test_a_source_can_be_attached_to_a_project_and_the_project_says_so(
     assert "already synced" in again.text
 
 
+def test_source_settings_patch_keeps_absent_fields_and_clears_empty_ones(
+    logged_in: TestClient,
+) -> None:
+    headers = _csrf(logged_in)
+    created = logged_in.post(
+        "/api/v1/sync/sources",
+        json={"kind": "github", "locator": "o/r", "branch": "main", "token_env": "PB_TOKEN"},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    source_id = created.json()["id"]
+
+    patched = logged_in.patch(
+        f"/api/v1/sync/sources/{source_id}",
+        json={"path": "deep/project-budget.yaml"},
+        headers=headers,
+    )
+    assert patched.status_code == 200, patched.text
+    assert (patched.json()["branch"], patched.json()["path"], patched.json()["token_env"]) == (
+        "main",
+        "deep/project-budget.yaml",
+        "PB_TOKEN",
+    )
+    cleared = logged_in.patch(
+        f"/api/v1/sync/sources/{source_id}", json={"token_env": "", "branch": ""}, headers=headers
+    )
+    assert (cleared.json()["branch"], cleared.json()["token_env"]) == (None, None)
+    assert cleared.json()["path"] == "deep/project-budget.yaml"
+
+    refused = logged_in.patch(
+        f"/api/v1/sync/sources/{source_id}", json={"token_env": "ghp_not_a_name"}, headers=headers
+    )
+    assert refused.status_code == 422
+    assert "NAME" in refused.text
+    assert logged_in.patch("/api/v1/sync/sources/nope", json={}, headers=headers).status_code == 404
+
+
 def test_sources_preview_apply_runs_and_detach(logged_in: TestClient) -> None:
     headers = _csrf(logged_in)
     import_dir = _settings(logged_in).effective_sync_import_dir

@@ -11,6 +11,7 @@ from projectbudget.api.schemas import (
     SyncRunOut,
     SyncSourceIn,
     SyncSourceOut,
+    SyncSourceUpdateIn,
 )
 from projectbudget.services import sync
 from projectbudget.services.clock import today
@@ -57,6 +58,32 @@ def get_source(request: Request, principal: Owner, source_id: str) -> SyncSource
     return SyncSourceOut.of(sync.get_source(session_factory(request), principal, source_id))
 
 
+@router.patch("/sources/{source_id}")
+def update_source(
+    request: Request, principal: Owner, source_id: str, body: SyncSourceUpdateIn
+) -> SyncSourceOut:
+    """Change branch, path, token variable or CSV project id; kind and locator are fixed."""
+    factory = session_factory(request)
+    current = sync.get_source(factory, principal, source_id)
+
+    def pick(new: str | None, old: str | None) -> str | None:
+        return old if new is None else (new or None)
+
+    info = sync.update_source(
+        factory,
+        principal,
+        source_id,
+        sync.SourceUpdate(
+            branch=pick(body.branch, current.branch),
+            path=pick(body.path, current.path),
+            external_project_id=pick(body.external_project_id, current.external_project_id),
+            token_env=pick(body.token_env, current.token_env),
+        ),
+        import_dir=app_settings(request).effective_sync_import_dir,
+    )
+    return SyncSourceOut.of(info)
+
+
 @router.delete("/sources/{source_id}", status_code=204)
 def detach_source(request: Request, principal: Owner, source_id: str) -> None:
     """Remove the source; its project and requirements stay and become manual."""
@@ -83,6 +110,7 @@ def preview(
         import_dir=app_settings(request).effective_sync_import_dir,
         fetched=_uploaded(body.manifest_text, "upload"),
         force=body.force,
+        github_token=app_settings(request).effective_github_token,
     )
     return SyncPreviewOut.of(shown)
 
@@ -102,5 +130,6 @@ def apply(
         expected_content_hash=body.expected_content_hash,
         expected_plan_digest=body.expected_plan_digest,
         force=body.force,
+        github_token=app_settings(request).effective_github_token,
     )
     return SyncResultOut.of(result)

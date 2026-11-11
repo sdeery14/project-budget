@@ -66,6 +66,6 @@ A CSV source has fixed columns `id,name,qty,unit,kind,priority,sharing,catalog,e
 | `csv` | same, plus the project id on the source | SHA-256 of the content | file mtime |
 | `github` | `owner/repo`, optional branch, path (default `project-budget.yaml`) | latest commit SHA touching the file | that commit's date |
 
-GitHub sources talk only to `api.github.com`. Public repositories need nothing; for a private one, put a fine-grained read-only token in an environment variable on the server and give the variable's name on the source. The token itself is never stored.
+GitHub sources talk only to `api.github.com`. Public repositories need nothing. For private ones, set one fine-grained read-only token as `PROJECTBUDGET_GITHUB_TOKEN` on the server and every GitHub source uses it; a source may name its own token variable instead, for a repository that needs a different token. The token itself is never stored. The recipe is in `docs/operations.md`, section "GitHub tokens". Branch, path and token variable can be changed on the source page; kind and locator cannot, since they are the source's identity.
 
 From the command line: `projectbudget sync SOURCE_ID --dry-run` prints the plan, `projectbudget sync SOURCE_ID` applies it, `--force` plans even when the content is unchanged.
