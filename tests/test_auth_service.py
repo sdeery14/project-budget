@@ -7,9 +7,10 @@ import pytest
 from sqlalchemy import select
 
 from conftest import OWNER_PASSWORD, OWNER_USERNAME
+from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import LoginAttempt, LoginSession
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import auth
+from projectbudget.services import auth, passwords
 
 NOW = datetime(2026, 11, 7, 12, 0, 0)
 IDLE = timedelta(hours=1)
@@ -201,3 +202,67 @@ def test_sessions_have_an_absolute_lifetime(
     auth.create_session(session_factory, owner.id, now=end)
     with session_factory() as db:
         assert db.get(LoginSession, auth.hash_secret(stale.cookie_value)) is None
+
+
+def test_change_password_checks_the_current_one_and_signs_other_sessions_out(
+    session_factory: SessionFactory, owner: auth.OwnerInfo
+) -> None:
+    mine = auth.create_session(session_factory, owner.id, now=NOW)
+    other = auth.create_session(session_factory, owner.id, now=NOW)
+    me = auth.resolve_session(session_factory, mine.cookie_value, idle_timeout=IDLE, now=NOW)
+    assert me is not None
+
+    with pytest.raises(auth.WrongPasswordError):
+        auth.change_password(
+            session_factory, me.principal, "not it", "a brand new password", keep_session_id=me.id
+        )
+    with pytest.raises(passwords.WeakPasswordError):
+        auth.change_password(
+            session_factory, me.principal, OWNER_PASSWORD, "short", keep_session_id=me.id
+        )
+    # Nothing changed so far: the old password still works and both sessions live.
+    assert auth.authenticate(session_factory, OWNER_USERNAME, OWNER_PASSWORD, limit_keys=["x"])
+    assert auth.resolve_session(session_factory, other.cookie_value, idle_timeout=IDLE, now=NOW)
+
+    auth.change_password(
+        session_factory, me.principal, OWNER_PASSWORD, "a brand new password", keep_session_id=me.id
+    )
+    assert (
+        auth.authenticate(session_factory, OWNER_USERNAME, OWNER_PASSWORD, limit_keys=["x"]) is None
+    )
+    assert auth.authenticate(
+        session_factory, OWNER_USERNAME, "a brand new password", limit_keys=["x"]
+    )
+    assert auth.resolve_session(session_factory, mine.cookie_value, idle_timeout=IDLE, now=NOW)
+    assert (
+        auth.resolve_session(session_factory, other.cookie_value, idle_timeout=IDLE, now=NOW)
+        is None
+    )
+
+
+def test_tokens_cannot_change_the_password(
+    session_factory: SessionFactory, owner: auth.OwnerInfo
+) -> None:
+    via_token = Principal(owner_id=owner.id, username=owner.username, auth="token")
+    with pytest.raises(auth.PasswordChangeRequiresSessionError):
+        auth.change_password(session_factory, via_token, OWNER_PASSWORD, "a brand new password")
+    assert auth.authenticate(session_factory, OWNER_USERNAME, OWNER_PASSWORD, limit_keys=["x"])
+
+
+def test_set_password_needs_no_old_one_and_signs_everyone_out(
+    session_factory: SessionFactory, owner: auth.OwnerInfo
+) -> None:
+    session = auth.create_session(session_factory, owner.id, now=NOW)
+    with pytest.raises(auth.NoOwnerError):
+        auth.set_password(session_factory, "nobody", "a brand new password")
+    with pytest.raises(passwords.WeakPasswordError):
+        auth.set_password(session_factory, OWNER_USERNAME, "short")
+    info = auth.set_password(session_factory, OWNER_USERNAME.upper(), "a brand new password")
+    assert info.username == OWNER_USERNAME
+    assert auth.authenticate(
+        session_factory, OWNER_USERNAME, "a brand new password", limit_keys=["x"]
+    )
+    assert (
+        auth.resolve_session(session_factory, session.cookie_value, idle_timeout=IDLE, now=NOW)
+        is None
+    )

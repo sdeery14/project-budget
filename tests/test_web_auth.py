@@ -176,3 +176,92 @@ def test_plain_http_from_a_non_local_host_shows_a_warning(
         assert "plain HTTP" in client.get("/login").text
     with make_client(settings, base_url="http://localhost") as client:
         assert "plain HTTP" not in client.get("/login").text
+
+
+def test_account_page_changes_the_password_and_keeps_this_session(
+    client: TestClient, owner: auth.OwnerInfo
+) -> None:
+    log_in(client)
+    page = client.get("/settings/account")
+    assert page.status_code == 200
+    assert 'id="change-password"' in page.text
+    assert "projectbudget passwd --username owner" in page.text
+    token = csrf_token_from(page.text)
+
+    wrong = client.post(
+        "/settings/account/password",
+        data={
+            "csrf_token": token,
+            "current_password": "not it",
+            "new_password": "a brand new password",
+            "confirm_password": "a brand new password",
+        },
+    )
+    assert wrong.status_code == 422
+    assert "current password is wrong" in wrong.text
+    mismatch = client.post(
+        "/settings/account/password",
+        data={
+            "csrf_token": token,
+            "current_password": OWNER_PASSWORD,
+            "new_password": "a brand new password",
+            "confirm_password": "a brand new passwor",
+        },
+    )
+    assert mismatch.status_code == 422
+    assert "not typed the same twice" in mismatch.text
+    weak = client.post(
+        "/settings/account/password",
+        data={
+            "csrf_token": token,
+            "current_password": OWNER_PASSWORD,
+            "new_password": "short",
+            "confirm_password": "short",
+        },
+    )
+    assert weak.status_code == 422
+
+    changed = client.post(
+        "/settings/account/password",
+        data={
+            "csrf_token": token,
+            "current_password": OWNER_PASSWORD,
+            "new_password": "a brand new password",
+            "confirm_password": "a brand new password",
+        },
+    )
+    assert changed.status_code == 200
+    assert "Password changed" in changed.text
+    assert client.get("/backlog").status_code == 200  # this session stays signed in
+
+    settings: Settings = client.app.state.settings  # type: ignore[attr-defined]
+    with make_client(settings) as fresh:
+        old = fresh.post("/login", data={"username": OWNER_USERNAME, "password": OWNER_PASSWORD})
+        assert old.status_code == 401
+        new = fresh.post(
+            "/login", data={"username": OWNER_USERNAME, "password": "a brand new password"}
+        )
+        assert new.status_code == 303
+
+
+def test_a_token_cannot_reach_the_password_change(logged_in: TestClient) -> None:
+    csrf = csrf_token_from(logged_in.get("/").text)
+    issued = logged_in.post(
+        "/api/v1/tokens",
+        json={"name": "script", "read_only": False},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert issued.status_code == 201, issued.text
+    secret = issued.json()["token"]
+    settings: Settings = logged_in.app.state.settings  # type: ignore[attr-defined]
+    with make_client(settings) as bare:
+        denied = bare.post(
+            "/settings/account/password",
+            data={
+                "current_password": OWNER_PASSWORD,
+                "new_password": "a brand new password",
+                "confirm_password": "a brand new password",
+            },
+            headers={"Authorization": f"Bearer {secret}"},
+        )
+    assert denied.status_code == 403
