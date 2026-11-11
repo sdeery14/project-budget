@@ -15,7 +15,9 @@ from pathlib import Path
 import pytest
 import uvicorn
 
-pytest.importorskip("playwright", reason="pytest-playwright is not installed (uv sync --group e2e)")
+pytest.importorskip(
+    "pytest_playwright", reason="pytest-playwright is not installed (uv sync --group e2e)"
+)
 
 from playwright.sync_api import Browser, BrowserContext, Error, Page
 
