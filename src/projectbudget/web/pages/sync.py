@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from projectbudget.adapters.sources import FetchedManifest
 from projectbudget.domain.catalog import SourceKind
 from projectbudget.domain.principal import Principal
-from projectbudget.services import sync
+from projectbudget.services import projects, sync
 from projectbudget.services.clock import today
 from projectbudget.services.errors import USER_ERRORS
 from projectbudget.web.auth import Owner, app_settings, session_factory
@@ -30,6 +30,7 @@ def _list_context(request: Request, principal: Principal, **extra: Any) -> dict[
     return {
         "sources": sync.list_sources(factory, principal),
         "kinds": list(SourceKind),
+        "projects": [p for p in projects.list_projects(factory, principal) if p.source_id is None],
         "import_dir": app_settings(request).effective_sync_import_dir,
         **extra,
     }
@@ -100,6 +101,7 @@ def create_source(  # nosec B107
     path: Annotated[str, Form()] = "",
     external_project_id: Annotated[str, Form()] = "",
     token_env: Annotated[str, Form()] = "",
+    project_id: Annotated[str, Form()] = "",
 ) -> Response:
     try:
         info = sync.create_source(
@@ -112,6 +114,7 @@ def create_source(  # nosec B107
                 path=path or None,
                 external_project_id=external_project_id or None,
                 token_env=token_env or None,
+                project_id=project_id or None,
             ),
             import_dir=app_settings(request).effective_sync_import_dir,
         )

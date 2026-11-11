@@ -45,6 +45,7 @@ def create_source(request: Request, principal: Owner, body: SyncSourceIn) -> Syn
             path=body.path,
             external_project_id=body.external_project_id,
             token_env=body.token_env,
+            project_id=body.project_id,
         ),
         import_dir=app_settings(request).effective_sync_import_dir,
     )

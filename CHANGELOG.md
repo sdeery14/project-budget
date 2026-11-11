@@ -6,6 +6,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Added
 
+- A sync source can be attached to an existing project (chosen on the Add source form or with `project_id` on the API). On the first apply, hand-entered requirements whose catalog item the manifest also names are adopted, keeping intent, sharing, notes and consumption; the plan lists adoptions as their own action and warns when a source with no project chosen would create a second project with the same name (#26, ADR-012).
 - Browser smoke tests (`tests/e2e`, Playwright, Chromium) that sign in, run the core journey, check destructive buttons ask first and fail on console errors, at desktop and phone width; CI runs them as "UI smoke (Playwright)".
 
 ### Changed

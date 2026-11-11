@@ -135,6 +135,55 @@ def test_sync_pages_end_to_end(logged_in: TestClient) -> None:
     assert logged_in.get(f"/sync/{source_id}").status_code == 404
 
 
+def test_add_source_into_an_existing_project_shows_adoptions(logged_in: TestClient) -> None:
+    csrf = _csrf(logged_in)
+    (_import_dir(logged_in) / "shed.yaml").write_text(MANIFEST, encoding="utf-8")
+    project = logged_in.post("/projects", data={"csrf_token": csrf, "name": "Shed by hand"})
+    project_id = project.headers["location"].rsplit("/", 1)[1]
+    added = logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "item_text": "Deck screws", "qty": "1", "priority": "3"},
+    )
+    assert added.status_code in (200, 303), added.text
+
+    form = logged_in.get("/sync").text
+    assert '<select id="project_id" name="project_id">' in form
+    assert f'<option value="{project_id}">Shed by hand</option>' in form
+
+    created = logged_in.post(
+        "/sync",
+        data={"csrf_token": csrf, "kind": "file", "locator": "shed.yaml", "project_id": project_id},
+    )
+    assert created.status_code == 303
+    source_id = created.headers["location"].rsplit("/", 1)[1]
+    assert "Shed by hand" in logged_in.get(f"/sync/{source_id}").text
+    # The project is taken: it no longer appears as a choice for another source.
+    assert f'<option value="{project_id}">' not in logged_in.get("/sync").text
+
+    shown = logged_in.post(f"/sync/{source_id}/preview", data={"csrf_token": csrf})
+    assert shown.status_code == 200
+    assert ">adopt</span>" in shown.text
+    assert "Deck screws: your requirement becomes this source" in shown.text
+    assert "qty 1 → 100; priority 3 → 2" in shown.text
+    assert "Hand saw" in shown.text  # created beside it; a hand-entered saw would be consumable
+    content_hash = shown.text.split('name="expected_content_hash" value="')[1].split('"')[0]
+    plan_digest = shown.text.split('name="expected_plan_digest" value="')[1].split('"')[0]
+    applied = logged_in.post(
+        f"/sync/{source_id}/apply",
+        data={
+            "csrf_token": csrf,
+            "expected_content_hash": content_hash,
+            "expected_plan_digest": plan_digest,
+            "force": "true",
+        },
+    )
+    assert applied.status_code == 200
+    assert "1 created, 1 adopted" in applied.text
+    projects_page = logged_in.get("/projects").text
+    assert projects_page.count("Garden shed") >= 1
+    assert "Shed by hand" not in projects_page  # renamed by the manifest, not duplicated
+
+
 def test_add_source_validation_renders_the_error(logged_in: TestClient) -> None:
     csrf = _csrf(logged_in)
     bad = logged_in.post(
