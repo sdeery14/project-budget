@@ -826,6 +826,22 @@ class PlanArchiveOut(BaseModel):
 class PlanRejectOut(BaseModel):
     external_id: str
     reason: str
+    item_id: str | None = None
+    item_name: str | None = None
+    because: str | None = Field(
+        default=None,
+        description="For a kind/unit reject: why the manifest may not change the item.",
+    )
+
+    @classmethod
+    def of(cls, reject: sync_domain.Reject) -> "PlanRejectOut":
+        return cls(
+            external_id=reject.external_id,
+            reason=reject.reason,
+            item_id=reject.item_id,
+            item_name=reject.item_name,
+            because=reject.because,
+        )
 
 
 class SyncPlanOut(BaseModel):
@@ -906,13 +922,8 @@ class SyncPlanOut(BaseModel):
                 )
                 for a in plan.archives
             ],
-            rejects=[
-                PlanRejectOut(external_id=r.external_id, reason=r.reason) for r in plan.rejects
-            ],
-            estimate_rejects=[
-                PlanRejectOut(external_id=r.external_id, reason=r.reason)
-                for r in plan.estimate_rejects
-            ],
+            rejects=[PlanRejectOut.of(r) for r in plan.rejects],
+            estimate_rejects=[PlanRejectOut.of(r) for r in plan.estimate_rejects],
             unchanged=list(plan.unchanged),
             digest=plan.digest,
         )

@@ -68,6 +68,7 @@ from projectbudget.services.catalog import (
     find_live_by_slug,
     insert_item,
     lock_item,
+    unit_in_use,
 )
 from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import NotFoundError, require_write
@@ -458,20 +459,37 @@ def parse(source: SourceInfo, fetched: FetchedManifest) -> Manifest:
 # --- plan ------------------------------------------------------------------------------------
 
 
-def _referenced_elsewhere(db: Session, item_id: str, source_id: str) -> bool:
+def _references(db: Session, item_id: str, source_id: str) -> tuple[str, ...]:
+    """What else uses the item, in the owner's words; empty when the source alone does."""
     probes = (
-        select(Requirement.id).where(
-            Requirement.catalog_item_id == item_id,
-            (Requirement.source_id.is_(None)) | (Requirement.source_id != source_id),
+        (
+            "a requirement you entered by hand",
+            select(Requirement.id).where(
+                Requirement.catalog_item_id == item_id, Requirement.source_id.is_(None)
+            ),
         ),
-        select(PurchaseLine.id).where(PurchaseLine.catalog_item_id == item_id),
-        select(InventoryMovement.id).where(InventoryMovement.catalog_item_id == item_id),
-        select(PriceEstimate.id).where(
-            PriceEstimate.catalog_item_id == item_id,
-            PriceEstimate.origin != EstimateOrigin.MANIFEST.value,
+        (
+            "a requirement from another source",
+            select(Requirement.id).where(
+                Requirement.catalog_item_id == item_id,
+                Requirement.source_id.is_not(None),
+                Requirement.source_id != source_id,
+            ),
+        ),
+        ("a purchase", select(PurchaseLine.id).where(PurchaseLine.catalog_item_id == item_id)),
+        (
+            "stock movements",
+            select(InventoryMovement.id).where(InventoryMovement.catalog_item_id == item_id),
+        ),
+        (
+            "a price you entered",
+            select(PriceEstimate.id).where(
+                PriceEstimate.catalog_item_id == item_id,
+                PriceEstimate.origin != EstimateOrigin.MANIFEST.value,
+            ),
         ),
     )
-    return any(db.scalar(select(exists(probe))) for probe in probes)
+    return tuple(label for label, probe in probes if db.scalar(select(exists(probe))))
 
 
 def _manifest_estimate(db: Session, item_id: str, currency: str) -> Money | None:
@@ -523,7 +541,8 @@ def _context(
             review_state=ReviewState(row.review_state),
             merged=row.merged_into_id is not None,
             created_by_this_source=row.created_by_source_id == source.id,
-            referenced_elsewhere=_referenced_elsewhere(db, row.id, source.id),
+            references=_references(db, row.id, source.id),
+            unit_locked=unit_in_use(db, row.id),
             manifest_estimate=_manifest_estimate(db, row.id, currency),
         )
 

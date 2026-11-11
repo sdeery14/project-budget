@@ -18,6 +18,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Fixed
 
+- A sync reject for a kind or unit the manifest may not change now names the actual reason (confirmed, merged, created by hand, or used by a requirement, purchase, stock or price), links the catalog item and states the two ways out; when every reject shares one cause the preview says so once above the table (#28).
 - A GitHub 404 now says that GitHub reports a private repository as not found without a token and how to set one, instead of a bare status code; the token variable field no longer shows a plausible value as its placeholder (#29, #31).
 - The sync sources table and a source's runs table stack at phone width like the other tables, so the source page no longer scrolls sideways.
 - Phone width: the navigation wraps, inline form fields fill the line one per row, and the backlog, timeline, requirements, catalog and purchases tables become labelled stacked rows below 640 px, so nothing scrolls sideways and the shortfall and price columns stay on screen (#15).

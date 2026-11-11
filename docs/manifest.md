@@ -47,7 +47,7 @@ A CSV source has fixed columns `id,name,qty,unit,kind,priority,sharing,catalog,e
 | Id back again | The same requirement is reactivated |
 | Same name under a new id | A new requirement plus an archive of the old one; the plan flags the likely rename |
 | Schema error anywhere | Whole file rejected with line-level messages; nothing applied |
-| Kind or unit that differs on an item the source does not own | That item is rejected; everything else applies |
+| Kind or unit that differs on an item the source does not own | That item is rejected, with the reason (you confirmed it, it was merged, this source did not create it, or something else uses it) and the way out: change the item on its page, or put the catalog's value in the manifest; a unit that requirements, prices, stock or purchases are already in can only be matched in the manifest. Everything else applies |
 | Two items in one file defining the same catalog item differently | The later one is rejected |
 | Estimate in another currency | Only the estimate is rejected; the item still applies |
 

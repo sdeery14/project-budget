@@ -200,7 +200,7 @@ def find_live_by_slug(db: Session, slug: str) -> CatalogItem | None:
     return resolve_live(db, row) if row is not None else None
 
 
-def _is_referenced(db: Session, item_id: str) -> bool:
+def unit_in_use(db: Session, item_id: str) -> bool:
     """True when a requirement, estimate, movement or purchase line is in this item's unit.
 
     Movements count even when they net to zero, and purchase lines count in every
@@ -309,7 +309,7 @@ def update_item(
         if command.kind is not None:
             row.kind = ItemKind(command.kind).value
         if unit is not None and unit != row.unit:
-            if _is_referenced(db, row.id):
+            if unit_in_use(db, row.id):
                 raise UnitInUseError(row.id, row.unit)
             row.unit = unit
         if command.review_state is not None:

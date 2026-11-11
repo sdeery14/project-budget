@@ -254,7 +254,8 @@ def sync_cmd(
     finally:
         engine.dispose()
     for change in plan.project_changes:
-        typer.echo(f"  project {change.field}: {change.old} -> {change.new}")
+        was = "unset" if change.old is None else change.old
+        typer.echo(f"  project {change.field}: {was} -> {change.new}")
     for key, value in plan.counts.items():
         typer.echo(f"  {key}: {value}")
     for reject in (*plan.rejects, *plan.estimate_rejects):
