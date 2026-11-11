@@ -505,7 +505,11 @@ def test_ownership_conflict_rejects_the_item_and_applies_the_rest(
     result = sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
     assert result.plan is not None
     assert [r.external_id for r in result.plan.rejects] == ["fuel-line"]
-    assert "does not own" in result.plan.rejects[0].reason
+    reject = result.plan.rejects[0]
+    # Created by hand and confirmed: both reasons, in that order.
+    assert reject.because == "this source did not create it and you confirmed it in the catalog"
+    assert (reject.item_id, reject.item_name) == (confirmed.id, "6 mm fuel line")
+    assert "may not change it because this source did not create it" in reject.reason
     assert result.plan.counts["creates"] == 1
     assert catalog.get_item(session_factory, principal, confirmed.id).unit == "ft"
     project_id = result.source.project_id or ""
@@ -555,6 +559,7 @@ def test_source_owned_item_follows_kind_and_unit_until_it_is_referenced_elsewher
     )
     assert back.plan is not None
     assert [r.external_id for r in back.plan.rejects] == ["fuel-line"]
+    assert back.plan.rejects[0].because == "it is used by stock movements"
     assert catalog.get_item(session_factory, principal, fuel.id).unit == "ft"
 
 

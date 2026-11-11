@@ -77,13 +77,17 @@
     {% for warning in plan.warnings %}
     <p class="alert warning" role="status">{{ warning }}</p>
     {% endfor %}
+    {% if plan.shared_reject_cause %}
+    <p class="alert warning" role="status" id="reject-summary">{{ plan.rejects | length }} items are rejected for one reason: {{ plan.shared_reject_cause }}.
+      Each reject row links to its catalog item; fix the catalog or the manifest, then preview again. Everything else applies now.</p>
+    {% endif %}
     <div class="table-wrap">
     <table id="plan">
       <thead><tr><th>Action</th><th>Item id</th><th>Detail</th></tr></thead>
       <tbody>
         {% if plan.project_changes %}
         <tr><td><span class="badge ok">project</span></td><td><code>{{ plan.project_id }}</code></td>
-          <td>{% for ch in plan.project_changes %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>
+          <td>{% for ch in plan.project_changes %}{{ ch.field }} {{ ch.old if ch.old is not none else "unset" }} → {{ ch.new }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>
         {% endif %}
         {% for c in plan.creates %}
         <tr><td><span class="badge ok">create</span></td><td><code>{{ c.external_id }}</code></td>
@@ -107,7 +111,8 @@
         <tr><td><span class="badge warn">archive</span></td><td><code>{{ a.external_id }}</code></td><td>{{ a.item_name }}: removed from source; purchases and consumption stay</td></tr>
         {% endfor %}
         {% for r in plan.rejects %}
-        <tr><td><span class="badge warn">reject</span></td><td><code>{{ r.external_id }}</code></td><td>{{ r.reason }}</td></tr>
+        <tr><td><span class="badge warn">reject</span></td><td><code>{{ r.external_id }}</code></td>
+          <td>{% if r.item_id %}<a href="/catalog/{{ r.item_id }}">{{ r.item_name }}</a>: {{ r.mismatch }}; this source may not change it because {{ r.because }}. {{ r.fix }}{% else %}{{ r.reason }}{% endif %}</td></tr>
         {% endfor %}
         {% for r in plan.estimate_rejects %}
         <tr><td><span class="badge warn">estimate rejected</span></td><td><code>{{ r.external_id }}</code></td><td>{{ r.reason }} (other fields apply)</td></tr>

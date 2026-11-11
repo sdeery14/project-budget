@@ -68,10 +68,29 @@ class CatalogState:
     review_state: ReviewState
     merged: bool
     created_by_this_source: bool
-    referenced_elsewhere: bool
-    """Requirements of other sources or manual ones, purchase lines, movements, manual estimates."""
+    references: tuple[str, ...] = ()
+    """What else uses the item, in words: a requirement entered by hand or from another source,
+    a purchase, stock movements, a price the owner entered. Empty when nothing does."""
     manifest_estimate: Money | None = None
     """The latest estimate this source already recorded for the item."""
+
+    @property
+    def referenced_elsewhere(self) -> bool:
+        return bool(self.references)
+
+    @property
+    def ownership_reasons(self) -> tuple[str, ...]:
+        """Why the manifest may not change kind or unit, each as a clause; empty when it may."""
+        reasons = []
+        if not self.created_by_this_source:
+            reasons.append("this source did not create it")
+        if self.merged:
+            reasons.append("it was merged into another item")
+        if self.review_state is ReviewState.CONFIRMED:
+            reasons.append("you confirmed it in the catalog")
+        if self.references:
+            reasons.append("it is used by " + " and ".join(self.references))
+        return tuple(reasons)
 
     @property
     def source_owned(self) -> bool:
@@ -167,6 +186,15 @@ class Archive:
 class Reject:
     external_id: str
     reason: str
+    """The whole story in one sentence, for the API and the CLI."""
+    item_id: str | None = None
+    item_name: str | None = None
+    mismatch: str | None = None
+    """For a kind/unit reject: what the manifest says against what the catalog has."""
+    because: str | None = None
+    """For a kind/unit reject: the real reason the manifest may not change the item."""
+    fix: str | None = None
+    """For a kind/unit reject: the two ways out, as a sentence."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +219,14 @@ class SyncPlan:
     @property
     def reactivations(self) -> tuple[Update, ...]:
         return tuple(u for u in self.updates if u.reactivate)
+
+    @property
+    def shared_reject_cause(self) -> str | None:
+        """When several rejects have one and the same cause, that cause; otherwise None."""
+        causes = {r.because for r in self.rejects}
+        if len(self.rejects) > 1 and len(causes) == 1 and None not in causes:
+            return causes.pop()
+        return None
 
     @property
     def digest(self) -> str:
@@ -232,6 +268,30 @@ def _resolve_estimate(item: ManifestItem, currency: str) -> tuple[Money | None, 
         return None, f"estimate currency {exc.right} differs from the workspace currency {exc.left}"
     except MoneyParseError as exc:
         return None, f"estimate amount rejected: {exc}"
+
+
+def _ownership_reject(
+    external_id: str, state: CatalogState, structural: tuple[FieldChange, ...]
+) -> Reject:
+    """A kind/unit mismatch on an item the source does not own: say why and what to do (#28)."""
+    mismatch = "; ".join(
+        f"{c.field} {c.new!r} in the manifest, {c.old!r} in the catalog" for c in structural
+    )
+    because = " and ".join(state.ownership_reasons) or "it is not this source's to change"
+    in_catalog = " and ".join(
+        f"change the item's {c.field} to {c.new!r} on its page" for c in structural
+    )
+    in_manifest = " and ".join(f"set {c.field}: {c.old} in the manifest" for c in structural)
+    fix = f"Either {in_catalog}, or {in_manifest}."
+    return Reject(
+        external_id,
+        f"{state.name}: {mismatch}; this source may not change it because {because}. {fix}",
+        item_id=state.id,
+        item_name=state.name,
+        mismatch=mismatch,
+        because=because,
+        fix=fix,
+    )
 
 
 def _item_changes(item: ManifestItem, state: CatalogState) -> tuple[FieldChange, ...]:
@@ -305,14 +365,7 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
             differing = _item_changes(item, state)
             structural = tuple(c for c in differing if c.field in ("kind", "unit"))
             if structural and not state.source_owned:
-                what = " and ".join(f"{c.field} {c.old!r} vs {c.new!r}" for c in structural)
-                rejects.append(
-                    Reject(
-                        item.id,
-                        f"{what} on catalog item {state.slug!r}, which this source does not own "
-                        "(confirmed, merged or referenced elsewhere); resolve it in the catalog",
-                    )
-                )
+                rejects.append(_ownership_reject(item.id, state, structural))
                 continue
             item_changes = differing if state.source_owned else ()
             if estimate is not None and state.manifest_estimate == estimate:

@@ -222,6 +222,37 @@ def test_github_source_page_says_which_token_it_uses_and_lets_you_change_setting
     assert logged_in.get("/sync/nope/settings").status_code in (404, 405)
 
 
+def test_a_reject_row_links_the_item_and_says_why(logged_in: TestClient) -> None:
+    """#28: the owner's case, a tool entered by hand that the manifest calls reusable."""
+    csrf = _csrf(logged_in)
+    (_import_dir(logged_in) / "shed.yaml").write_text(MANIFEST, encoding="utf-8")
+    project = logged_in.post("/projects", data={"csrf_token": csrf, "name": "Shed"})
+    project_id = project.headers["location"].rsplit("/", 1)[1]
+    logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "item_text": "Hand saw", "qty": "1"},
+    )
+    created = logged_in.post(
+        "/sync",
+        data={"csrf_token": csrf, "kind": "file", "locator": "shed.yaml", "project_id": project_id},
+    )
+    source_id = created.headers["location"].rsplit("/", 1)[1]
+    shown = logged_in.post(f"/sync/{source_id}/preview", data={"csrf_token": csrf}).text
+    row = shown.split('<span class="badge warn">reject</span>')[1].split("</tr>")[0]
+    assert 'href="/catalog/' in row
+    assert (
+        ">Hand saw</a>: kind &#39;reusable&#39; in the manifest, &#39;consumable&#39; in the catalog"
+        in row
+    )
+    assert (
+        "because this source did not create it and it is used by a requirement you entered by hand"
+        in row
+    )
+    assert "Either change the item&#39;s kind to &#39;reusable&#39; on its page" in row
+    assert 'id="reject-summary"' not in shown  # one reject: nothing to summarise
+    assert "external_id unset → shed" in shown  # a hand-built project had no external id yet
+
+
 def test_add_source_validation_renders_the_error(logged_in: TestClient) -> None:
     csrf = _csrf(logged_in)
     bad = logged_in.post(

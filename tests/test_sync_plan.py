@@ -90,7 +90,7 @@ def state(
         review_state=review_state,
         merged=merged,
         created_by_this_source=mine,
-        referenced_elsewhere=elsewhere,
+        references=("a requirement you entered by hand",) if elsewhere else (),
         manifest_estimate=manifest_estimate,
     )
 
@@ -284,8 +284,50 @@ def test_kind_or_unit_differing_on_an_item_the_source_does_not_own_rejects_that_
         )
     )
     assert sorted(r.external_id for r in plan.rejects) == ["g", "s", "t", "w"]
-    assert "unit 'm' vs 'ft'" in next(r.reason for r in plan.rejects if r.external_id == "w")
+    by_id = {r.external_id: r for r in plan.rejects}
+    # Each reject names the real reason, links the item and states both ways out (#28).
+    assert by_id["w"].because == "you confirmed it in the catalog"
+    assert by_id["t"].because == "it was merged into another item"
+    assert by_id["g"].because == "it is used by a requirement you entered by hand"
+    assert by_id["s"].because == "this source did not create it"
+    assert by_id["w"].mismatch == "unit 'ft' in the manifest, 'm' in the catalog"
+    assert (
+        by_id["w"].fix
+        == "Either change the item's unit to 'ft' on its page, or set unit: m in the manifest."
+    )
+    assert (by_id["w"].item_id, by_id["w"].item_name) == ("item-wire", "Wire")
+    assert by_id["w"].reason == (
+        "Wire: unit 'ft' in the manifest, 'm' in the catalog; this source may not change it "
+        "because you confirmed it in the catalog. Either change the item's unit to 'ft' on its "
+        "page, or set unit: m in the manifest."
+    )
+    assert plan.shared_reject_cause is None  # four different causes
     assert [c.external_id for c in plan.creates] == ["ok"]
+
+
+def test_rejects_with_one_cause_are_summarised_once() -> None:
+    """Seven tools entered by hand and marked reusable in the manifest: one cause, said once (#28)."""
+    by_hand = {
+        slug: state(slug, slug.title(), mine=False, elsewhere=True)
+        for slug in ("pump", "stand", "wrench")
+    }
+    plan = plan_sync(
+        ctx(
+            item("p", "Pump", kind=ItemKind.REUSABLE),
+            item("s", "Stand", kind=ItemKind.REUSABLE),
+            item("w", "Wrench", kind=ItemKind.REUSABLE),
+            item("new", "Sealant"),
+            catalog=by_hand,
+        )
+    )
+    assert len(plan.rejects) == 3
+    assert plan.shared_reject_cause == (
+        "this source did not create it and it is used by a requirement you entered by hand"
+    )
+    assert all(
+        r.fix is not None and "set kind: consumable in the manifest" in r.fix for r in plan.rejects
+    )
+    assert [c.external_id for c in plan.creates] == ["new"]
 
 
 def test_kind_and_unit_follow_the_manifest_while_the_source_owns_the_item() -> None:
