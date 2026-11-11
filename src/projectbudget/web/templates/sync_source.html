@@ -115,7 +115,8 @@
       {% endfor %}
     </tbody>
   </table>
-  <form method="post" action="/sync/{{ source.id }}/detach" class="inline">
+  <form method="post" action="/sync/{{ source.id }}/detach" class="inline"
+        data-confirm="Detach “{{ source.label }}”? The source and its run history are removed; the project and its requirements stay and become manual.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="danger">Detach from source</button>
   </form>

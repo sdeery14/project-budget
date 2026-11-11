@@ -37,7 +37,7 @@
     {% endif %}
     {% if p.open %}
       <form method="post" action="/purchases/{{ p.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="received"><button type="submit">Receive everything</button></form>
-      <form method="post" action="/purchases/{{ p.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="cancelled"><button type="submit" class="danger">Cancel purchase</button></form>
+      <form method="post" action="/purchases/{{ p.id }}/status" data-confirm="Cancel this purchase? Its lines stop counting as spent or on order; the record stays."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="cancelled"><button type="submit" class="danger">Cancel purchase</button></form>
     {% endif %}
     {% if p.status.value == "cancelled" %}
       <form method="post" action="/purchases/{{ p.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="status" value="planned"><button type="submit" class="secondary">Reopen as planned</button></form>
@@ -72,7 +72,8 @@
         </td>
         <td>
           {% if p.open and line.received_qty == 0 and p.lines | length > 1 %}
-          <form method="post" action="/purchases/{{ p.id }}/lines/{{ line.id }}/remove">
+          <form method="post" action="/purchases/{{ p.id }}/lines/{{ line.id }}/remove"
+                data-confirm="Remove this line from the purchase?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="danger">Remove</button>
           </form>

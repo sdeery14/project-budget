@@ -102,6 +102,13 @@ def test_merge_form_on_the_item_page(logged_in: TestClient, canonical: Canonical
     page = logged_in.get(f"/catalog/{dupe_id}").text
     assert "Merge into another item" in page
     assert canonical.clamp.id in page  # offered as a target: same unit and kind
+    # Nothing is preselected and the form asks first, naming both items (#17).
+    assert '<option value="" selected>choose the item to keep' in page
+    assert 'data-confirm="Merge “Bar clamp (dupe)” into “{target}”?' in page
+    assert "confirm.js" in page
+    blank = logged_in.post(f"/catalog/{dupe_id}/merge", data={"csrf_token": csrf, "target_id": ""})
+    assert blank.status_code == 422
+    assert "Choose the item to keep" in blank.text
     assert (
         canonical.bolts.id not in page.split("Merge into another item")[1]
     )  # consumable: not offered

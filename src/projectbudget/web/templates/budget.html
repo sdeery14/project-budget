@@ -61,7 +61,8 @@
         <td class="money{% if o.delta.is_negative %} neg{% endif %}">{{ o.delta }}</td>
         <td>{{ o.label }}</td>
         <td>
-          <form method="post" action="/budget/overrides/{{ o.id }}/delete" class="inline">
+          <form method="post" action="/budget/overrides/{{ o.id }}/delete" class="inline"
+                data-confirm="Remove the {{ o.month.strftime('%b %Y') }} override “{{ o.label }}”?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="danger">Remove</button>
           </form>
