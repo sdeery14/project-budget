@@ -1,5 +1,7 @@
 """Owner, sessions and the database-backed login rate limit (ADR-005)."""
 
+import contextlib
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
@@ -264,5 +266,60 @@ def test_set_password_needs_no_old_one_and_signs_everyone_out(
     )
     assert (
         auth.resolve_session(session_factory, session.cookie_value, idle_timeout=IDLE, now=NOW)
+        is None
+    )
+
+
+def test_a_reset_cannot_be_overwritten_by_an_in_flight_password_change(
+    session_factory: SessionFactory, owner: auth.OwnerInfo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review finding on #48: the page verifies the old hash while the CLI resets; the reset wins.
+
+    Both writers lock the owner row before reading. The change request is held at the
+    barrier right after it has taken the lock and verified; the reset waits for the lock,
+    so it writes last, or it gets the lock first and the change then fails verification.
+    Either way the reset password is the one that works afterwards.
+    """
+    session = auth.create_session(session_factory, owner.id, now=NOW)
+    me = auth.resolve_session(session_factory, session.cookie_value, idle_timeout=IDLE, now=NOW)
+    assert me is not None
+    barrier = threading.Barrier(2)
+    real_verify = passwords.verify_password
+
+    def paused_verify(password_hash: str, password: str) -> bool:
+        with contextlib.suppress(threading.BrokenBarrierError):
+            barrier.wait(timeout=1.5)
+        return real_verify(password_hash, password)
+
+    monkeypatch.setattr(passwords, "verify_password", paused_verify)
+
+    def change() -> str:
+        try:
+            auth.change_password(
+                session_factory,
+                me.principal,
+                OWNER_PASSWORD,
+                "a brand new password",
+                keep_session_id=me.id,
+            )
+        except auth.WrongPasswordError:
+            return "refused"
+        return "changed"
+
+    def reset() -> str:
+        with contextlib.suppress(threading.BrokenBarrierError):
+            barrier.wait(timeout=1.5)
+        auth.set_password(session_factory, OWNER_USERNAME, "the reset password")
+        return "reset"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = sorted(pool.map(lambda fn: fn(), (change, reset)))
+    assert outcomes in (["changed", "reset"], ["refused", "reset"])
+    monkeypatch.setattr(passwords, "verify_password", real_verify)
+    assert auth.authenticate(
+        session_factory, OWNER_USERNAME, "the reset password", limit_keys=["x"]
+    )
+    assert (
+        auth.authenticate(session_factory, OWNER_USERNAME, "a brand new password", limit_keys=["x"])
         is None
     )
