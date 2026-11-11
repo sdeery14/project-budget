@@ -19,7 +19,13 @@ from projectbudget.domain.consolidation import (
 )
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
-from projectbudget.persistence.models import BacklogOrder, CatalogItem, PriceEstimate, Requirement
+from projectbudget.persistence.models import (
+    BacklogOrder,
+    CatalogItem,
+    PriceEstimate,
+    Project,
+    Requirement,
+)
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services import workspace
 from projectbudget.services.catalog import load_item
@@ -45,6 +51,10 @@ def get_backlog(session_factory: SessionFactory, principal: Principal) -> Backlo
         estimates = _current_estimates(db)
         order = db.scalars(
             select(BacklogOrder.catalog_item_id).order_by(BacklogOrder.position)
+        ).all()
+        # Projects rank in creation order until a project order exists (ADR-012).
+        project_order = db.scalars(
+            select(Project.id).order_by(Project.created_at, Project.id)
         ).all()
 
     facts = [
@@ -73,10 +83,13 @@ def get_backlog(session_factory: SessionFactory, principal: Principal) -> Backlo
             sharing=Sharing(r.sharing),
             intent=Intent(r.intent),
             consumed=consumed.get(r.id, 0),
+            sort_order=r.sort_order,
         )
         for r in requirements
     ]
-    return consolidate(facts, lines, order=list(order), currency=currency)
+    return consolidate(
+        facts, lines, order=list(order), currency=currency, project_order=list(project_order)
+    )
 
 
 def _current_estimates(db: Session) -> dict[str, PriceEstimate]:

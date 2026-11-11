@@ -1,6 +1,6 @@
 # ADR-004: Item kind and consolidation
 
-**Status:** Accepted
+**Status:** Accepted, amended by ADR-012 (default order within a priority tier; money figures net of on-order)
 **Date:** 2026-11-07
 **Implements:** RFC v3 §4 (Domain model, Consolidation rules, Invariants)
 

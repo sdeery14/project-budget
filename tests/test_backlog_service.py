@@ -1,6 +1,6 @@
 """The backlog service wires facts from the database into the pure consolidation."""
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -9,8 +9,11 @@ from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.fixtures.canonical import CanonicalWorkspace, seed_canonical
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import backlog, catalog, inventory, requirements
+from projectbudget.services import backlog, catalog, inventory, projects, requirements
 from projectbudget.services.guards import ReadOnlyPrincipalError
+
+NOW = datetime(2026, 11, 1, 9, 0, 0)
+LATER = datetime(2026, 11, 1, 9, 5, 0)
 
 
 @pytest.fixture
@@ -66,6 +69,42 @@ def test_latest_estimate_is_used(
     assert row.unit_price == Money(1000, "USD")
     assert row.item.price_as_of == date(2026, 11, 5)
     assert row.line_total == Money(2000, "USD")
+
+
+def test_default_order_follows_project_then_requirement_order(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    """ADR-012 (#34): projects rank in creation order; within one, by sort_order, never by name."""
+    garage = projects.create_project(
+        session_factory, principal, projects.ProjectCreate(name="Garage"), now=NOW
+    )
+    home = projects.create_project(
+        session_factory, principal, projects.ProjectCreate(name="Home"), now=LATER
+    )
+
+    def priced(name: str) -> str:
+        info = catalog.create_item(session_factory, principal, catalog.CatalogItemCreate(name=name))
+        catalog.add_estimate(
+            session_factory, principal, info.id, catalog.EstimateCreate(price=Money(100, "USD"))
+        )
+        return info.id
+
+    def need(project_id: str, item_id: str, *, priority: int = 2) -> None:
+        requirements.add_requirement(
+            session_factory,
+            principal,
+            requirements.RequirementCreate(
+                project_id=project_id, qty=1, priority=priority, catalog_item_id=item_id
+            ),
+        )
+
+    need(home.id, priced("Raspberry Pi"), priority=1)
+    need(home.id, priced("Active cooler"), priority=1)
+    need(garage.id, priced("Tyre sealant"))
+    need(garage.id, priced("Shock pump"), priority=1)
+
+    names = [row.item.name for row in backlog.get_backlog(session_factory, principal).rows]
+    assert names == ["Shock pump", "Raspberry Pi", "Active cooler", "Tyre sealant"]
 
 
 def test_set_order_and_move(

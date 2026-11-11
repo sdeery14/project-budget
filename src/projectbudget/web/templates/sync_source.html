@@ -64,7 +64,7 @@
         {% endfor %}
         {% for u in plan.updates %}
         <tr><td><span class="badge ok">{{ "reactivate" if u.reactivate else "update" }}</span></td><td><code>{{ u.external_id }}</code></td>
-          <td>{% for ch in u.changes %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% if not loop.last %}, {% endif %}{% endfor %}
+          <td>{% for ch in u.changes %}{% if ch.field == "sort_order" %}position {{ ch.old + 1 }} → {{ ch.new + 1 }}{% else %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
             {% for ch in u.item_changes %}; item {{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endfor %}
             {% if u.estimate %}; new estimate {{ u.estimate }}{% endif %}</td></tr>
         {% endfor %}
