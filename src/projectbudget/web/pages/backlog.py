@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from projectbudget.domain.consolidation import Backlog
 from projectbudget.domain.principal import Principal
-from projectbudget.services import backlog, projects
+from projectbudget.services import backlog, projects, requirements
 from projectbudget.web.auth import Owner, is_htmx, session_factory
 from projectbudget.web.templates import render
 
@@ -32,7 +32,12 @@ def _context(request: Request, principal: Principal) -> dict[str, Any]:
     names = {
         p.id: p.name for p in projects.list_projects(factory, principal, include_archived=True)
     }
-    return {"backlog": current, "project_names": names, "assumptions": ASSUMPTIONS}
+    return {
+        "backlog": current,
+        "project_names": names,
+        "assumptions": ASSUMPTIONS,
+        "has_requirements": requirements.any_active(factory, principal),
+    }
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
