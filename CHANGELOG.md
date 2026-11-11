@@ -4,6 +4,10 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ## [Unreleased]
 
+### Fixed
+
+- Destructive buttons (merge, cancel purchase, remove line, detach source, remove override, import) ask for confirmation first, and the merge form no longer preselects a target, so one stray click cannot merge two unrelated items (#17).
+
 ## [0.1.0] - 2026-11-08
 
 The first release: the complete V1 scope of RFC v3, self-hosted as one process.

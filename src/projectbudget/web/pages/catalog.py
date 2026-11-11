@@ -139,9 +139,11 @@ def update_item(
 
 @router.post(CATALOG_PATH + "/{item_id}/merge", response_class=HTMLResponse)
 def merge_item(
-    request: Request, principal: Owner, item_id: str, target_id: Annotated[str, Form()]
+    request: Request, principal: Owner, item_id: str, target_id: Annotated[str, Form()] = ""
 ) -> Response:
     try:
+        if not target_id.strip():
+            raise catalog.MergeError("Choose the item to keep")
         target = catalog.merge_items(session_factory(request), principal, item_id, target_id)
     except USER_ERRORS as exc:
         return _detail_error(request, principal, item_id, exc)

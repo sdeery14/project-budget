@@ -22,7 +22,8 @@
   The same document is served at <code>/api/v1/export</code>.</p>
 
   <h2>Import</h2>
-  <form method="post" action="/settings/data/import" enctype="multipart/form-data" class="row">
+  <form method="post" action="/settings/data/import" enctype="multipart/form-data" class="row"
+        data-confirm="Import this file? With “replace” ticked, everything already in this workspace is deleted first.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="grow"><label for="file">Export file</label>
       <input id="file" name="file" type="file" accept="application/json,.json" required></div>

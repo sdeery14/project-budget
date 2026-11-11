@@ -30,10 +30,12 @@
   <p class="muted">The slug never changes. The unit cannot change once requirements, prices, stock or purchases use it.</p>
   {% if not item.merged and merge_targets %}
   <h2>Merge into another item</h2>
-  <form method="post" action="/catalog/{{ item.id }}/merge" class="row">
+  <form method="post" action="/catalog/{{ item.id }}/merge" class="row"
+        data-confirm="Merge “{{ item.name }}” into “{target}”? Every requirement, purchase line, stock movement and price estimate moves to the item you keep. This cannot be undone.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="grow"><label for="target_id">Keep this one instead</label>
       <select id="target_id" name="target_id" required>
+        <option value="" selected>choose the item to keep…</option>
         {% for t in merge_targets %}<option value="{{ t.id }}">{{ t.name }} ({{ t.unit }}, {{ t.kind.value }})</option>{% endfor %}
       </select></div>
     <button type="submit" class="danger">Merge</button>
