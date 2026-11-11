@@ -179,3 +179,32 @@ def test_an_open_order_moves_money_from_still_to_buy_to_committed(
     expect(row.locator('td[data-label="On order"]')).to_have_text("1")
     expect(row.locator('td[data-label="Line total"]')).to_have_text("25.00")
     assert errors == []
+
+
+def test_a_sync_source_page_fits_a_phone(signed_in: Page, live_server: LiveServer) -> None:
+    """The source page (settings, plan, runs) stacks at phone width like the other pages."""
+    page = signed_in
+    live_server.import_dir.mkdir(parents=True, exist_ok=True)
+    manifest = "\n".join(
+        [
+            "version: 1",
+            "project: {id: shed, name: Shed}",
+            "items:",
+            "  - {id: saw, name: Hand saw, qty: 1, kind: reusable}",
+            "",
+        ]
+    )
+    (live_server.import_dir / "shed.yaml").write_text(manifest, encoding="utf-8")
+    page.goto(f"{live_server.url}/sync")
+    page.get_by_label("Source", exact=True).select_option("file")
+    page.get_by_label("File path or owner/repo").fill("shed.yaml")
+    page.get_by_role("button", name="Add source").click()
+    expect(page.get_by_role("heading", level=1)).to_contain_text("shed.yaml")
+    page.get_by_role("button", name="Fetch and preview").click()
+    expect(page.locator("#plan")).to_be_visible()
+
+    page.set_viewport_size({"width": PHONE_WIDTH, "height": 700})
+    for path in (page.url, f"{live_server.url}/sync"):
+        page.goto(path)
+        width = page.evaluate("() => document.documentElement.scrollWidth")
+        assert width <= PHONE_WIDTH, f"{path} is {width}px wide at {PHONE_WIDTH}px"
