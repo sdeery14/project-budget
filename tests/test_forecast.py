@@ -238,6 +238,32 @@ def test_a_reserve_the_contribution_covers_is_not_a_debt_and_not_blocked() -> No
     assert covered.conservative.reserve_shortfall == usd("0.00")
 
 
+def test_a_contribution_already_in_the_balance_is_offset_with_a_current_month_override() -> None:
+    """Review finding on #47: balance 350 with the 350 contribution already received, reserve 100.
+
+    The engine always adds month 1's contribution, so without the override it would see
+    600 and buy a 500 item; with the override only the 250 really spendable counts.
+    """
+    rows = backlog(("stand", 1, "500.00"))
+    naive = forecast(plan("350.00", reserve="100.00", contribution="350.00"), rows, usd("0"), TODAY)
+    assert naive.conservative.items[0].month == NOV  # the double count the page warns about
+
+    offset = MonthOverride(month=NOV, delta=usd("-350.00"), label="already in balance")
+    honest = forecast(
+        plan("350.00", reserve="100.00", contribution="350.00", overrides=(offset,)),
+        rows,
+        usd("0"),
+        TODAY,
+    )
+    sched = honest.conservative
+    assert sched.spendable == usd("250.00")
+    assert sched.months[0].overrides == (offset,)
+    assert sched.months[0].closing == usd("250.00")
+    assert sched.months[0].purchases == ()
+    assert not sched.blocked
+    assert sched.items[0].month == DEC  # 250 + 350 = 600 covers the 500 stand
+
+
 def test_balance_may_be_stale_after_sixty_days() -> None:
     fresh = forecast(plan(as_of=date(2026, 9, 9)), backlog(), usd("0"), TODAY)
     assert fresh.balance_stale is False  # exactly 60 days

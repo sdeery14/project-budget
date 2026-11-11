@@ -115,6 +115,16 @@ def test_timeline_page_explains_each_month_and_draws_the_chart(
     assert logged_in.get("/static/vendor/chartjs/chart.umd.js").status_code == 200
 
 
+def test_budget_page_says_how_to_offset_a_contribution_already_in_the_balance(
+    logged_in: TestClient,
+) -> None:
+    text = logged_in.get("/budget").text
+    assert 'id="contribution-help"' in text
+    assert "<strong>minus</strong> the contribution" in text
+    assert "already in balance" in text
+    assert "after payday" not in text
+
+
 def test_a_reserve_shortfall_is_a_note_not_a_red_negative(
     logged_in: TestClient, canonical: CanonicalWorkspace
 ) -> None:

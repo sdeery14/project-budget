@@ -30,9 +30,11 @@
              value="{{ plan.contingency_pct if plan else 0 }}"></div>
     <button type="submit">{{ "Save plan" if plan else "Create plan" }}</button>
   </form>
-  <p class="muted" id="contribution-help">The contribution is counted in full this month as well. If you have already been paid this
-    month, enter the balance after payday so it is not counted twice. The reserve is a floor the timeline never spends below,
-    not money you owe: with a balance smaller than the reserve the timeline starts at 0 spendable and fills the reserve first.</p>
+  <p class="muted" id="contribution-help">The timeline adds the full monthly contribution to this month as well, whatever the day.
+    If this month's contribution is already in the balance you entered, it would be counted twice: add a month override below
+    for the current month of <strong>minus</strong> the contribution, labelled for example "already in balance". The reserve is
+    a floor the timeline never spends below, not money you owe: with a balance smaller than the reserve the timeline starts at
+    0 spendable and fills the reserve first.</p>
   {% if plan %}
   <p class="muted">Last saved {{ plan.updated_at.strftime("%Y-%m-%d %H:%M") }} UTC ·
     <a href="/timeline">See the timeline</a></p>
