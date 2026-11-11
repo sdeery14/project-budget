@@ -4,7 +4,8 @@
 <section class="card">
   <h1>Backlog</h1>
   <p class="muted">Everything your active projects still need, consolidated per item. Shared tools are
-  counted once at the largest demand; parts add up. On-hand stock is already subtracted.
+  counted once at the largest demand; parts add up. On-hand stock is already subtracted, and the
+  money figures count only what is not yet on order, the same as the timeline.
   Rows come in priority order, then by project and each project's own order (a manifest's file
   order); moving a row fixes the whole order until you move again.</p>
 
@@ -12,6 +13,10 @@
     <li>
       <span class="label">Still to buy{% if backlog.is_lower_bound %} (lower bound){% endif %}</span>
       <span class="value" id="backlog-total">{{ backlog.total }} {{ backlog.currency }}</span>
+    </li>
+    <li>
+      <span class="label">Committed on order</span>
+      <span class="value" id="backlog-committed">{{ backlog.committed }} {{ backlog.currency }}</span>
     </li>
     <li><span class="label">Priced rows</span><span class="value">{{ backlog.rows | length }}</span></li>
     <li><span class="label">Needs a price</span><span class="value" id="unpriced-count">{{ backlog.unpriced_count }}</span></li>

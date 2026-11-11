@@ -157,3 +157,25 @@ def test_backlog_rows_stack_on_a_phone(phone: Page, live_server: LiveServer) -> 
         cell_box = cell.bounding_box()
         assert cell_box is not None, label
         assert cell_box["x"] + cell_box["width"] <= PHONE_WIDTH, label
+
+
+def test_an_open_order_moves_money_from_still_to_buy_to_committed(
+    signed_in: Page, live_server: LiveServer
+) -> None:
+    """ADR-012 (#25): the backlog's money agrees with the timeline once something is ordered."""
+    page = signed_in
+    errors = _console_errors(page)
+    page.goto(f"{live_server.url}/purchases")
+    page.get_by_label("First item").select_option(label="Bar clamp (each)")
+    page.get_by_label("Qty").fill("1")
+    page.get_by_label("Unit price (USD)").fill("12.00")
+    page.get_by_role("button", name="Record purchase").click()
+    expect(page.get_by_role("heading", level=1)).to_contain_text("Purchase")
+
+    page.goto(f"{live_server.url}/backlog")
+    expect(page.locator("#backlog-total")).to_have_text("25.00 USD")  # 3 short, 1 on order
+    expect(page.locator("#backlog-committed")).to_have_text("12.00 USD")  # at the order's price
+    row = page.get_by_role("row", name=re.compile("Bar clamp"))
+    expect(row.locator('td[data-label="On order"]')).to_have_text("1")
+    expect(row.locator('td[data-label="Line total"]')).to_have_text("25.00")
+    assert errors == []

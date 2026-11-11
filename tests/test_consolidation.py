@@ -51,6 +51,7 @@ def item(
     on_order: int = 0,
     price: str | None = None,
     name: str | None = None,
+    on_order_cost: str | None = None,
 ) -> ItemFacts:
     return ItemFacts(
         id=id_,
@@ -62,6 +63,7 @@ def item(
         on_order=on_order,
         unit_price=Money.parse(price, USD) if price is not None else None,
         price_as_of=date(2026, 11, 1) if price is not None else None,
+        on_order_cost=Money.parse(on_order_cost, USD) if on_order_cost is not None else None,
     )
 
 
@@ -135,9 +137,10 @@ def test_row_priority_is_the_most_urgent_contributing_requirement() -> None:
     assert row_priority(paused_urgent) == 3
 
 
-def test_on_order_is_a_separate_column_and_nets_only_the_forecast_quantity() -> None:
+def test_on_order_is_a_separate_column_and_money_figures_are_net_of_it() -> None:
+    """Quantities per ADR-004; money per ADR-012 (#25): the backlog buys what the forecast buys."""
     backlog = consolidate(
-        [item("bolt", ItemKind.CONSUMABLE, on_order=6, price="0.50")],
+        [item("bolt", ItemKind.CONSUMABLE, on_order=6, price="0.50", on_order_cost="2.70")],
         [line("bolt", 10)],
         order=[],
         currency=USD,
@@ -146,16 +149,41 @@ def test_on_order_is_a_separate_column_and_nets_only_the_forecast_quantity() -> 
     assert row.gross_shortfall == 10
     assert row.on_order == 6
     assert row.net_shortfall == 4
-    # The backlog total is gross shortfall at the current price (ADR-004).
-    assert row.line_total == Money(500, USD)
-    assert backlog.total == Money(500, USD)
+    assert not row.fully_ordered
+    # Line total and the still-to-buy total are net shortfall at the current estimate.
+    assert row.line_total == Money(200, USD)
+    assert backlog.total == Money(200, USD)
+    # What is already on order is shown as committed money at the purchase's own prices.
+    assert row.on_order_cost == Money(270, USD)
+    assert backlog.committed == Money(270, USD)
+
     fully_ordered = consolidate(
-        [item("bolt", ItemKind.CONSUMABLE, on_order=12, price="0.50")],
+        [item("bolt", ItemKind.CONSUMABLE, on_order=12, price="0.50", on_order_cost="6.00")],
         [line("bolt", 10)],
         order=[],
         currency=USD,
     )
-    assert fully_ordered.rows[0].net_shortfall == 0  # stays visible until received
+    (row,) = fully_ordered.rows  # stays visible, marked, until received
+    assert (row.net_shortfall, row.fully_ordered, row.line_total) == (0, True, Money.zero(USD))
+    assert fully_ordered.total == Money.zero(USD)
+    assert fully_ordered.committed == Money(600, USD)
+
+
+def test_committed_money_counts_unpriced_rows_too_and_nothing_without_an_order() -> None:
+    backlog = consolidate(
+        [
+            item("a", ItemKind.CONSUMABLE, on_order=1, on_order_cost="3.00"),
+            item("b", ItemKind.CONSUMABLE, price="1.00"),
+        ],
+        [line("a", 2), line("b", 1)],
+        order=[],
+        currency=USD,
+    )
+    assert [row.item.id for row in backlog.unpriced] == ["a"]
+    assert backlog.unpriced[0].on_order_cost == Money(300, USD)
+    assert backlog.rows[0].on_order_cost is None
+    assert backlog.committed == Money(300, USD)
+    assert backlog.total == Money(100, USD)
 
 
 def test_unpriced_items_go_to_their_own_bucket_and_never_sum_as_zero() -> None:

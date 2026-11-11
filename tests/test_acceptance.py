@@ -212,11 +212,19 @@ def test_acceptance_4b_partial_receipt_leaves_the_remainder_on_order(
         if r["item_id"] == canonical.clamp.id
     )
     assert (api_row["gross_shortfall"], api_row["on_order"]) == (1, 1)
+    # Money is net of the order (ADR-012, #25): nothing left to buy for the clamps, and the
+    # one still on order is committed at the purchase's price, not the estimate.
+    assert (api_row["line_total"]["amount"], api_row["fully_ordered"]) == ("0.00", True)
+    assert api_row["on_order_cost"]["amount"] == "12.50"
+    api = logged_in.get("/api/v1/backlog").json()
+    assert api["committed"]["amount"] == "12.50"
     page = logged_in.get("/backlog").text
     clamp_row = _row_html(page, f'id="row-{canonical.clamp.id}"')
     cells = [c for c in clamp_row.split("<td") if 'class="num"' in c]
     assert "<strong>1</strong>" in clamp_row  # shortfall
     assert any(">1</td>" in c for c in cells)  # on order
+    assert ">on order</span>" in clamp_row
+    assert 'id="backlog-committed">12.50 USD' in page
     # Net shortfall 0: the forecast schedules nothing for the clamps while the order is open.
     result = forecast.get_forecast(session_factory, principal, today=date(2026, 11, 8))
     assert result is not None

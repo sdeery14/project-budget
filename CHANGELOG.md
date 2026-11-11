@@ -10,6 +10,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Changed
 
+- The backlog's money figures (line totals and "Still to buy") count only what is not yet on order, the same quantity the timeline buys, so the two pages no longer disagree by the value of open orders. A "Committed on order" tile shows that money at the purchases' prices, and a fully ordered row carries an "on order" badge until it is received (#25, ADR-012).
 - Default backlog and timeline order within a priority tier is now by project (creation order) and then each project's own requirement order instead of alphabetical; a manifest sets that order to its file order on every apply, so the file's order is the purchase order (#34, ADR-012). The owner's explicit backlog order still wins.
 
 ### Fixed

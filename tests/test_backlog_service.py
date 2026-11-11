@@ -4,12 +4,19 @@ from datetime import date, datetime
 
 import pytest
 
-from projectbudget.domain.catalog import Intent, ItemKind
+from projectbudget.domain.catalog import Intent, ItemKind, PurchaseStatus
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.fixtures.canonical import CanonicalWorkspace, seed_canonical
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import backlog, catalog, inventory, projects, requirements
+from projectbudget.services import (
+    backlog,
+    catalog,
+    inventory,
+    projects,
+    purchases,
+    requirements,
+)
 from projectbudget.services.guards import ReadOnlyPrincipalError
 
 NOW = datetime(2026, 11, 1, 9, 0, 0)
@@ -69,6 +76,47 @@ def test_latest_estimate_is_used(
     assert row.unit_price == Money(1000, "USD")
     assert row.item.price_as_of == date(2026, 11, 5)
     assert row.line_total == Money(2000, "USD")
+
+
+def test_money_figures_net_out_open_orders_and_show_them_as_committed(
+    session_factory: SessionFactory, principal: Principal, canonical: CanonicalWorkspace
+) -> None:
+    """ADR-012 (#25): the tile buys what the timeline buys; the order's own price is committed."""
+    before = backlog.get_backlog(session_factory, principal)
+    assert before.committed == Money.zero("USD")
+    # Two clamps short (gross 2); order both at a price below the 12.50 estimate.
+    order = purchases.record_purchase(
+        session_factory,
+        principal,
+        purchases.PurchaseCreate(
+            lines=(purchases.PurchaseLineCreate(canonical.clamp.id, 2, Money(1100, "USD")),),
+            status=PurchaseStatus.ORDERED,
+            ordered_on=date(2026, 11, 8),
+        ),
+    )
+    result = backlog.get_backlog(session_factory, principal)
+    clamp = next(row for row in result.rows if row.item.id == canonical.clamp.id)
+    assert (clamp.gross_shortfall, clamp.on_order, clamp.net_shortfall) == (2, 2, 0)
+    assert clamp.fully_ordered
+    assert clamp.line_total == Money.zero("USD")
+    assert clamp.on_order_cost == Money(2200, "USD")
+    assert result.total == before.total - Money(2500, "USD")
+    assert result.committed == Money(2200, "USD")
+
+    # Receiving one leaves one on order: half the committed money, still nothing to buy.
+    purchases.receive_line(
+        session_factory, principal, order.lines[0].id, 1, occurred_on=date(2026, 11, 9)
+    )
+    received = backlog.get_backlog(session_factory, principal)
+    clamp = next(row for row in received.rows if row.item.id == canonical.clamp.id)
+    assert (clamp.on_hand, clamp.gross_shortfall, clamp.on_order, clamp.net_shortfall) == (
+        2,
+        1,
+        1,
+        0,
+    )
+    assert received.committed == Money(1100, "USD")
+    assert received.total == result.total
 
 
 def test_default_order_follows_project_then_requirement_order(

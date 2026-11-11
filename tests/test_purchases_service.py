@@ -83,9 +83,8 @@ def test_ordered_purchase_is_on_order_not_stock(
     assert inventory.on_hand(session_factory, principal, clamp.id) == 0
     (row,) = backlog.get_backlog(session_factory, principal).rows
     assert (row.gross_shortfall, row.on_order, row.net_shortfall) == (3, 2, 1)
-    assert row.line_total == usd(
-        "30.00"
-    )  # the backlog shows gross shortfall; only the forecast nets
+    assert row.line_total == usd("10.00")  # net of the two on order (ADR-012)
+    assert row.on_order_cost == usd("20.00")
 
 
 def test_total_since_counts_ordered_and_received_dated_on_or_after(

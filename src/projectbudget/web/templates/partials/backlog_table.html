@@ -27,7 +27,8 @@
       <td data-label="Item">
         <span><a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a>
         <span class="badge">{{ row.item.kind.value }}</span>
-        {% if row.shared %}<span class="badge" title="Shared reusable item: counted once at the largest single demand">shared</span>{% endif %}</span>
+        {% if row.shared %}<span class="badge" title="Shared reusable item: counted once at the largest single demand">shared</span>{% endif %}
+        {% if row.fully_ordered %}<span class="badge ok" title="Every missing unit is on order; the row stays until it is received">on order</span>{% endif %}</span>
       </td>
       <td data-label="Priority"><span class="badge p{{ row.priority }}">P{{ row.priority }}</span></td>
       <td class="num" data-label="Needed">{{ row.needed }} {{ row.item.unit }}</td>
@@ -35,7 +36,7 @@
       <td class="num" data-label="Shortfall"><strong>{{ row.gross_shortfall }}</strong></td>
       <td class="num" data-label="On order">{{ row.on_order }}</td>
       <td class="num" data-label="Unit price">{{ row.unit_price }}</td>
-      <td class="num" data-label="Line total">{{ row.line_total }}</td>
+      <td class="num" data-label="Line total" title="Net of what is on order">{{ row.line_total }}</td>
       <td data-label="Projects"><span>{% for pid in row.project_ids %}<a href="/projects/{{ pid }}">{{ project_names.get(pid, "?") }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span></td>
     </tr>
     {% else %}

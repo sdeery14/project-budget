@@ -13,7 +13,10 @@ For each catalog item, over requirements with intent ``active``:
   the consumption).
 - gross shortfall = needed - on-hand, floored at zero; rows at zero leave.
 
-On-order is shown beside gross shortfall and netted out only by the forecast.
+On-order is shown beside gross shortfall as its own column. Money figures (line
+totals, the "still to buy" total) use the net shortfall, gross minus on-order,
+the same quantity the forecast buys; what is already on order is shown
+separately as committed money at the purchase's actual prices (ADR-012).
 Row priority is the most urgent contributing requirement. Rows follow the
 workspace backlog order; items not yet in it append in the default order
 (ADR-012): priority, then project, then the contributing requirement's
@@ -65,6 +68,8 @@ class ItemFacts:
     on_order: int = 0
     unit_price: Money | None = None
     price_as_of: date | None = None
+    on_order_cost: Money | None = None
+    """What the unreceived ordered quantity cost on its purchase lines (actual prices)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,10 +102,23 @@ class BacklogRow:
 
     @property
     def line_total(self) -> Money | None:
-        """Gross shortfall at the current estimate, or None when unpriced (never zero)."""
+        """Net shortfall at the current estimate, or None when unpriced (ADR-012).
+
+        Zero for a priced row that is fully on order: nothing more to buy for it.
+        """
         if self.item.unit_price is None:
             return None
-        return self.item.unit_price * self.gross_shortfall
+        return self.item.unit_price * self.net_shortfall
+
+    @property
+    def on_order_cost(self) -> Money | None:
+        """Money already committed on open orders for this item, at the purchases' prices."""
+        return self.item.on_order_cost
+
+    @property
+    def fully_ordered(self) -> bool:
+        """Every missing unit is on order: the row stays visible, marked, until received."""
+        return self.item.on_order > 0 and self.net_shortfall == 0
 
     @property
     def priced(self) -> bool:
@@ -117,8 +135,16 @@ class Backlog:
 
     @property
     def total(self) -> Money:
-        """Sum of priced line totals. A lower bound whenever ``unpriced`` is non-empty."""
+        """Still to buy: priced net line totals. A lower bound whenever ``unpriced`` is non-empty."""
         return sum_money((row.line_total for row in self.rows if row.line_total), self.currency)
+
+    @property
+    def committed(self) -> Money:
+        """Money already on open orders for the rows shown, at the purchases' actual prices."""
+        return sum_money(
+            (row.on_order_cost for row in (*self.rows, *self.unpriced) if row.on_order_cost),
+            self.currency,
+        )
 
     @property
     def unpriced_count(self) -> int:
