@@ -170,7 +170,7 @@ def test_requirement_actions_swap_rows_over_htmx(logged_in: TestClient) -> None:
         f"/requirements/{requirement_id}/consume", data={"csrf_token": csrf, "qty": "1"}, headers=hx
     )
     assert used.status_code == 200
-    assert '<td class="num">1</td>' in used.text  # consumed column
+    assert '<td class="num" data-label="Consumed">1</td>' in used.text
 
 
 def test_backlog_reorder_over_htmx_and_plain_post(logged_in: TestClient) -> None:

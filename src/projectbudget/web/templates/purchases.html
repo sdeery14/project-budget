@@ -27,17 +27,17 @@
   <p class="muted">More lines can be added on the purchase page.{% if not items %} Create a catalog item first.{% endif %}</p>
 
   <div class="table-wrap">
-  <table id="purchases">
+  <table id="purchases" class="responsive">
     <thead><tr><th>Date</th><th>Vendor</th><th>Status</th><th class="num">Lines</th><th class="num">Outstanding</th><th class="money">Total</th></tr></thead>
     <tbody>
       {% for p in purchases %}
       <tr id="purchase-{{ p.id }}"{% if p.status.value == "cancelled" %} class="muted"{% endif %}>
-        <td><a href="/purchases/{{ p.id }}">{{ p.ordered_on.isoformat() }}</a></td>
-        <td>{{ p.vendor or "—" }}</td>
-        <td><span class="badge">{{ p.status.value }}</span></td>
-        <td class="num">{{ p.lines | length }}</td>
-        <td class="num">{% if p.open %}{{ p.remaining_qty }}{% else %}—{% endif %}</td>
-        <td class="money">{{ p.total }}</td>
+        <td data-label="Date"><a href="/purchases/{{ p.id }}">{{ p.ordered_on.isoformat() }}</a></td>
+        <td data-label="Vendor">{{ p.vendor or "—" }}</td>
+        <td data-label="Status"><span class="badge">{{ p.status.value }}</span></td>
+        <td class="num" data-label="Lines">{{ p.lines | length }}</td>
+        <td class="num" data-label="Outstanding">{% if p.open %}{{ p.remaining_qty }}{% else %}—{% endif %}</td>
+        <td class="money" data-label="Total">{{ p.total }}</td>
       </tr>
       {% else %}
       <tr><td colspan="6" class="muted">No purchases yet.</td></tr>

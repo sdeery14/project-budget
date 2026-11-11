@@ -2,8 +2,8 @@
 {% block title %}Timeline · ProjectBudget{% endblock %}
 {% block scripts %}
 {% if forecast %}
-  <script src="{{ request.url_for('static', path='vendor/chartjs/chart.umd.js') }}" defer></script>
-  <script src="{{ request.url_for('static', path='timeline.js') }}" defer></script>
+  <script src="{{ request.url_for('static', path='vendor/chartjs/chart.umd.js') }}?v={{ version }}" defer></script>
+  <script src="{{ request.url_for('static', path='timeline.js') }}?v={{ version }}" defer></script>
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -62,7 +62,7 @@
 
   <h2>Items</h2>
   <div class="table-wrap">
-  <table id="items">
+  <table id="items" class="responsive">
     <thead>
       <tr><th>Item</th><th>Priority</th><th class="num">Qty</th><th class="money">Unit price</th>
           <th>Optimistic</th><th>Conservative ({{ c.contingency_pct }} %)</th><th></th></tr>
@@ -71,16 +71,16 @@
       {% for outcome in c.items %}
       {% set opt = optimistic_by_item[outcome.item.item_id] %}
       <tr id="item-{{ outcome.item.item_id }}">
-        <td><a href="/catalog/{{ outcome.item.item_id }}">{{ outcome.item.name }}</a>
-          {% if outcome.stale %}<span class="badge stale" title="Estimate older than 90 days">stale estimate</span>{% endif %}</td>
-        <td><span class="badge p{{ outcome.item.priority }}">P{{ outcome.item.priority }}</span></td>
-        <td class="num">{{ outcome.item.qty }} {{ outcome.item.unit }}</td>
-        <td class="money">{{ outcome.item.unit_price }}</td>
-        <td>{{ opt.cost }} ·
-          {% if opt.month %}{{ opt.month.strftime("%b %Y") }}{% else %}<span class="badge warn">{{ opt.status.replace("_", " ") }}</span>{% endif %}</td>
-        <td>{{ outcome.cost }} ·
-          {% if outcome.month %}{{ outcome.month.strftime("%b %Y") }}{% else %}<span class="badge warn">{{ outcome.status.replace("_", " ") }}</span>{% endif %}</td>
-        <td>
+        <td data-label="Item"><span><a href="/catalog/{{ outcome.item.item_id }}">{{ outcome.item.name }}</a>
+          {% if outcome.stale %}<span class="badge stale" title="Estimate older than 90 days">stale estimate</span>{% endif %}</span></td>
+        <td data-label="Priority"><span class="badge p{{ outcome.item.priority }}">P{{ outcome.item.priority }}</span></td>
+        <td class="num" data-label="Qty">{{ outcome.item.qty }} {{ outcome.item.unit }}</td>
+        <td class="money" data-label="Unit price">{{ outcome.item.unit_price }}</td>
+        <td data-label="Optimistic"><span>{{ opt.cost }} ·
+          {% if opt.month %}{{ opt.month.strftime("%b %Y") }}{% else %}<span class="badge warn">{{ opt.status.replace("_", " ") }}</span>{% endif %}</span></td>
+        <td data-label="Conservative ({{ c.contingency_pct }} %)"><span>{{ outcome.cost }} ·
+          {% if outcome.month %}{{ outcome.month.strftime("%b %Y") }}{% else %}<span class="badge warn">{{ outcome.status.replace("_", " ") }}</span>{% endif %}</span></td>
+        <td class="actions">
           <form method="post" action="/purchases/mark" class="inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="item_id" value="{{ outcome.item.item_id }}">
@@ -103,19 +103,19 @@
 <section class="card">
   <h2>Month by month (conservative)</h2>
   <div class="table-wrap">
-  <table id="months">
+  <table id="months" class="responsive">
     <thead>
       <tr><th>Month</th><th class="money">Opening</th><th class="money">Contribution</th><th>Overrides</th><th>Purchases</th><th class="money">Closing</th></tr>
     </thead>
     <tbody>
       {% for month in c.months %}
       <tr id="month-{{ month.month.isoformat() }}"{% if month.blocked %} class="blocked"{% endif %}>
-        <td>{{ month.month.strftime("%b %Y") }}{% if month.blocked %} <span class="badge warn">blocked</span>{% endif %}{% if month.stale %} <span class="badge stale">stale</span>{% endif %}</td>
-        <td class="money{% if month.opening.is_negative %} neg{% endif %}">{{ month.opening }}</td>
-        <td class="money">{{ month.contribution }}</td>
-        <td>{% if month.overrides %}<ul class="inline-list">{% for ov in month.overrides %}<li>{{ ov.delta }} {{ ov.label }}</li>{% endfor %}</ul>{% else %}<span class="muted">—</span>{% endif %}</td>
-        <td>{% if month.purchases %}<ul class="inline-list">{% for p in month.purchases %}<li>{{ p.item.name }} x {{ p.item.qty }}: {{ p.cost }}</li>{% endfor %}</ul>{% else %}<span class="muted">—</span>{% endif %}</td>
-        <td class="money{% if month.closing.is_negative %} neg{% endif %}">{{ month.closing }}</td>
+        <td data-label="Month"><span>{{ month.month.strftime("%b %Y") }}{% if month.blocked %} <span class="badge warn">blocked</span>{% endif %}{% if month.stale %} <span class="badge stale">stale</span>{% endif %}</span></td>
+        <td class="money{% if month.opening.is_negative %} neg{% endif %}" data-label="Opening">{{ month.opening }}</td>
+        <td class="money" data-label="Contribution">{{ month.contribution }}</td>
+        <td data-label="Overrides">{% if month.overrides %}<ul class="inline-list">{% for ov in month.overrides %}<li>{{ ov.delta }} {{ ov.label }}</li>{% endfor %}</ul>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td data-label="Purchases">{% if month.purchases %}<ul class="inline-list">{% for p in month.purchases %}<li>{{ p.item.name }} x {{ p.item.qty }}: {{ p.cost }}</li>{% endfor %}</ul>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="money{% if month.closing.is_negative %} neg{% endif %}" data-label="Closing">{{ month.closing }}</td>
       </tr>
       {% endfor %}
     </tbody>

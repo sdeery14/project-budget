@@ -1,17 +1,19 @@
 {% set r = row.requirement %}
 <tr id="requirement-{{ r.id }}"{% if r.intent.value != "active" %} class="muted"{% endif %}>
-  <td>
+  <td data-label="Item">
+    <span>
     <a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a>
     <span class="badge">{{ row.item.kind.value }}</span>
     {% if r.notes %}<div class="muted">{{ r.notes }}</div>{% endif %}
     {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+    </span>
   </td>
-  <td class="num">{{ r.qty }} {{ row.item.unit }}</td>
-  <td><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td>
-  <td>{{ r.sharing.value if row.item.kind.value == "reusable" else "—" }}</td>
-  <td>{{ r.intent.value }}{% if r.archive_reason %} <span class="muted">({{ r.archive_reason }})</span>{% endif %}</td>
-  <td class="num">{{ row.consumed }}</td>
-  <td class="num">{{ row.on_hand }}</td>
+  <td class="num" data-label="Qty">{{ r.qty }} {{ row.item.unit }}</td>
+  <td data-label="Priority"><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td>
+  <td data-label="Sharing">{{ r.sharing.value if row.item.kind.value == "reusable" else "—" }}</td>
+  <td data-label="Intent"><span>{{ r.intent.value }}{% if r.archive_reason %} <span class="muted">({{ r.archive_reason }})</span>{% endif %}</span></td>
+  <td class="num" data-label="Consumed">{{ row.consumed }}</td>
+  <td class="num" data-label="On hand">{{ row.on_hand }}</td>
   <td class="actions">
     {% if r.intent.value == "active" %}
       <form method="post" action="/requirements/{{ r.id }}/intent" hx-post="/requirements/{{ r.id }}/intent" hx-target="closest tr" hx-swap="outerHTML">
