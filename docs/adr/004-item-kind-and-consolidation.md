@@ -16,7 +16,7 @@ The product thesis is one honest backlog across projects. Parts are consumed; to
   - Reusable: needed = max(shared qty) + Σ (exclusive qty − consumed against that requirement); gross shortfall = needed − on-hand.
   - Gross shortfall floors at zero.
 - **Shared reusable requirements are never consumed against.** The service layer rejects such a movement.
-- **On-order** (unreceived quantity on purchases in `ordered` status) is a separate backlog column. The backlog shows gross shortfall; only the forecast (ADR-006) nets on-order out. An ordered item stays visible until received.
+- **On-order** (unreceived quantity on purchases in `ordered` status) is a separate backlog column. The backlog shows gross shortfall; only the forecast (ADR-006) nets on-order out. An ordered item stays visible until received. *(ADR-012: money figures, the line totals and the "still to buy" total, now use net shortfall, the quantity the forecast buys; a second tile shows what is already committed on open orders. Quantities are unchanged.)*
 - **Row priority** is the most urgent priority among the active contributing requirements. **Backlog order** is a workspace-level list on the budget plan; per-requirement `sort_order` orders only that project's view.
 - The UI shows the sharing assumptions beside any shared reusable item: time overlap between projects is not modeled; shared is the default and a requirement can override to exclusive; permanently installed parts are better modeled as consumable; on-hand counts every unit regardless of which project last used it.
 

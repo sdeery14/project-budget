@@ -281,7 +281,13 @@ class BacklogRowOut(BaseModel):
     on_order: int
     net_shortfall: int
     unit_price: MoneyOut | None
-    line_total: MoneyOut | None
+    line_total: MoneyOut | None = Field(
+        description="Net shortfall at the current estimate; 0 when nothing is left to buy; null when that needs a price (ADR-012)."
+    )
+    on_order_cost: MoneyOut | None = Field(
+        description="Money on open orders for this item at the purchases' prices; null when none."
+    )
+    fully_ordered: bool = Field(description="Net shortfall is zero because the rest is on order.")
     price_as_of: date | None
     shared: bool = Field(description="A shared reusable requirement contributes (ADR-004).")
     requirement_ids: list[str]
@@ -302,7 +308,9 @@ class BacklogRowOut(BaseModel):
             on_order=row.on_order,
             net_shortfall=row.net_shortfall,
             unit_price=MoneyOut.of(row.unit_price) if row.unit_price else None,
-            line_total=MoneyOut.of(row.line_total) if row.line_total else None,
+            line_total=MoneyOut.of(row.line_total) if row.line_total is not None else None,
+            on_order_cost=MoneyOut.of(row.on_order_cost) if row.on_order_cost else None,
+            fully_ordered=row.fully_ordered,
             price_as_of=row.item.price_as_of,
             shared=row.shared,
             requirement_ids=list(row.requirement_ids),
@@ -313,7 +321,10 @@ class BacklogRowOut(BaseModel):
 class BacklogOut(BaseModel):
     currency: str
     total: MoneyOut = Field(
-        description="Sum of priced rows; a lower bound when anything is unpriced."
+        description="Still to buy: net line totals of priced rows; a lower bound when anything is unpriced."
+    )
+    committed: MoneyOut = Field(
+        description="Money on open orders for every item, at the purchases' prices; independent of which rows show."
     )
     lower_bound: bool
     unpriced_count: int
@@ -325,6 +336,7 @@ class BacklogOut(BaseModel):
         return cls(
             currency=backlog.currency,
             total=MoneyOut.of(backlog.total),
+            committed=MoneyOut.of(backlog.committed),
             lower_bound=backlog.is_lower_bound,
             unpriced_count=backlog.unpriced_count,
             rows=[BacklogRowOut.of(row) for row in backlog.rows],

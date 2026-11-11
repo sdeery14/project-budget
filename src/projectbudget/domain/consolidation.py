@@ -13,7 +13,10 @@ For each catalog item, over requirements with intent ``active``:
   the consumption).
 - gross shortfall = needed - on-hand, floored at zero; rows at zero leave.
 
-On-order is shown beside gross shortfall and netted out only by the forecast.
+On-order is shown beside gross shortfall as its own column. Money figures (line
+totals, the "still to buy" total) use the net shortfall, gross minus on-order,
+the same quantity the forecast buys; what is already on order is shown
+separately as committed money at the purchase's actual prices (ADR-012).
 Row priority is the most urgent contributing requirement. Rows follow the
 workspace backlog order; items not yet in it append in the default order
 (ADR-012): priority, then project, then the contributing requirement's
@@ -65,11 +68,14 @@ class ItemFacts:
     on_order: int = 0
     unit_price: Money | None = None
     price_as_of: date | None = None
+    on_order_cost: Money | None = None
+    """What the unreceived ordered quantity cost on its purchase lines (actual prices)."""
 
 
 @dataclass(frozen=True, slots=True)
 class BacklogRow:
     item: ItemFacts
+    currency: str
     needed: int
     gross_shortfall: int
     priority: int
@@ -97,27 +103,54 @@ class BacklogRow:
 
     @property
     def line_total(self) -> Money | None:
-        """Gross shortfall at the current estimate, or None when unpriced (never zero)."""
+        """Net shortfall at the current estimate, or None when that needs a price (ADR-012).
+
+        Zero whenever nothing is left to buy, which needs no estimate: a fully ordered row
+        has a 0.00 line total with or without a price.
+        """
+        if self.net_shortfall == 0:
+            return Money.zero(self.currency)
         if self.item.unit_price is None:
             return None
-        return self.item.unit_price * self.gross_shortfall
+        return self.item.unit_price * self.net_shortfall
+
+    @property
+    def on_order_cost(self) -> Money | None:
+        """Money already committed on open orders for this item, at the purchases' prices."""
+        return self.item.on_order_cost
+
+    @property
+    def fully_ordered(self) -> bool:
+        """Every missing unit is on order: the row stays visible, marked, until received."""
+        return self.item.on_order > 0 and self.net_shortfall == 0
 
     @property
     def priced(self) -> bool:
         return self.item.unit_price is not None
+
+    @property
+    def needs_price(self) -> bool:
+        """Something is left to buy and there is no estimate to sum or schedule it with."""
+        return self.item.unit_price is None and self.net_shortfall > 0
 
 
 @dataclass(frozen=True, slots=True)
 class Backlog:
     currency: str
     rows: tuple[BacklogRow, ...]
-    """Priced rows with gross shortfall > 0, in backlog order."""
+    """Rows with gross shortfall > 0 that can be summed, in backlog order."""
     unpriced: tuple[BacklogRow, ...]
     """The "needs a price" bucket: counted, never summed, never scheduled."""
+    committed: Money
+    """Money on open orders for every item, at the purchases' prices (ADR-012).
+
+    Independent of what the backlog shows: an order stays committed while it is open even
+    when stock now covers the requirement and the row has left.
+    """
 
     @property
     def total(self) -> Money:
-        """Sum of priced line totals. A lower bound whenever ``unpriced`` is non-empty."""
+        """Still to buy: net line totals of ``rows``. A lower bound whenever ``unpriced`` is non-empty."""
         return sum_money((row.line_total for row in self.rows if row.line_total), self.currency)
 
     @property
@@ -184,6 +217,7 @@ def consolidate(
     between projects.
     """
     project_position = {project_id: index for index, project_id in enumerate(project_order)}
+    items = list(items)
     by_item: dict[str, list[RequirementLine]] = {}
     for line in lines:
         if line.active:
@@ -202,6 +236,7 @@ def consolidate(
         rows.append(
             BacklogRow(
                 item=item,
+                currency=currency,
                 needed=needed_quantity(item.kind, contributing),
                 gross_shortfall=shortfall,
                 priority=row_priority(contributing),
@@ -223,6 +258,7 @@ def consolidate(
     )
     return Backlog(
         currency=currency,
-        rows=tuple(row for row in rows if row.priced),
-        unpriced=tuple(row for row in rows if not row.priced),
+        rows=tuple(row for row in rows if not row.needs_price),
+        unpriced=tuple(row for row in rows if row.needs_price),
+        committed=sum_money((item.on_order_cost for item in items if item.on_order_cost), currency),
     )

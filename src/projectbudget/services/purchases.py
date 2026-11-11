@@ -547,3 +547,21 @@ def on_order_by_item(db: Session) -> dict[str, int]:
         .group_by(PurchaseLine.catalog_item_id)
     ).all()
     return {item_id: int(total) for item_id, total in rows if total}
+
+
+def on_order_cost_by_item(db: Session) -> dict[str, Money]:
+    """What the unreceived quantity on ``ordered`` purchases cost, per item (ADR-012).
+
+    Line prices only; shipping and tax stay on the purchase header.
+    """
+    rows = db.execute(
+        select(
+            PurchaseLine.catalog_item_id,
+            Purchase.currency,
+            func.sum(PurchaseLine.unit_price * (PurchaseLine.qty - PurchaseLine.received_qty)),
+        )
+        .join(Purchase, Purchase.id == PurchaseLine.purchase_id)
+        .where(Purchase.status == PurchaseStatus.ORDERED.value)
+        .group_by(PurchaseLine.catalog_item_id, Purchase.currency)
+    ).all()
+    return {item_id: Money(int(total), currency) for item_id, currency, total in rows if total}

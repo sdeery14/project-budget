@@ -31,7 +31,7 @@ from projectbudget.services import workspace
 from projectbudget.services.catalog import load_item
 from projectbudget.services.guards import require_write
 from projectbudget.services.inventory import consumed_by_requirement, on_hand_by_item
-from projectbudget.services.purchases import on_order_by_item
+from projectbudget.services.purchases import on_order_by_item, on_order_cost_by_item
 
 
 class DuplicateOrderError(ValueError):
@@ -48,6 +48,7 @@ def get_backlog(session_factory: SessionFactory, principal: Principal) -> Backlo
         consumed = consumed_by_requirement(db, (r.id for r in requirements))
         on_hand = on_hand_by_item(db)
         on_order = on_order_by_item(db)
+        on_order_cost = on_order_cost_by_item(db)
         estimates = _current_estimates(db)
         order = db.scalars(
             select(BacklogOrder.catalog_item_id).order_by(BacklogOrder.position)
@@ -70,6 +71,7 @@ def get_backlog(session_factory: SessionFactory, principal: Principal) -> Backlo
             if item.id in estimates
             else None,
             price_as_of=estimates[item.id].as_of if item.id in estimates else None,
+            on_order_cost=on_order_cost.get(item.id),
         )
         for item in items
     ]
