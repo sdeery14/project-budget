@@ -6,11 +6,11 @@ Versions come from git tags (hatch-vcs). Tagging `vX.Y.Z` on `main` runs `.githu
 
 - [ ] PyPI: create the `projectbudget` project and add a trusted publisher for this repository, workflow `release.yml`, environment `pypi`.
 - [ ] GitHub: create the `pypi` environment (optionally with a required reviewer); the GHCR package is created by the first push and should be set to public.
-- [ ] Branch protection on `main` requires the five CI checks.
+- [ ] Branch protection on `main` requires the six CI checks (lint and types, tests on SQLite and PostgreSQL, UI smoke, container health, security scans).
 
 ## Before tagging
 
-- [ ] `main` is green: lint and types, tests on SQLite and PostgreSQL, container health, security scans (acceptance test 7).
+- [ ] `main` is green: lint and types, tests on SQLite and PostgreSQL, UI smoke, container health, security scans (acceptance test 7).
 - [ ] `CHANGELOG.md` has a `## [X.Y.Z] - YYYY-MM-DD` section; the Unreleased section is empty.
 - [ ] `uv run pip-audit` is clean and Dependabot has nothing open that matters.
 - [ ] Restore drill (see `docs/operations.md`): take a `projectbudget backup` and a `projectbudget export` of a real-looking workspace, restore each into a fresh database, confirm the backlog and timeline match.

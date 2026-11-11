@@ -4,6 +4,10 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ## [Unreleased]
 
+### Added
+
+- Browser smoke tests (`tests/e2e`, Playwright, Chromium) that sign in, run the core journey, check destructive buttons ask first and fail on console errors, at desktop and phone width; CI runs them as "UI smoke (Playwright)".
+
 ### Fixed
 
 - Destructive buttons (merge, cancel purchase, remove line, detach source, remove override, import) ask for confirmation first, and the merge form no longer preselects a target, so one stray click cannot merge two unrelated items (#17).

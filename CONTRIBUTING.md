@@ -22,10 +22,13 @@ export PROJECTBUDGET_TEST_DATABASE_URL=postgresql+psycopg://projectbudget:projec
 | Lint and format | `uv run ruff check --fix . && uv run ruff format .` |
 | Types | `uv run mypy` |
 | Tests | `uv run pytest` |
+| Browser smoke tests | `uv sync --group e2e && uv run playwright install chromium`, then `uv run pytest tests/e2e` |
 | Everything pre-commit checks | `uv run pre-commit run --all-files` |
 | Dependency audit | `uv run pip-audit` |
 
-CI runs the same commands on both SQLite and PostgreSQL. A PR merges only when both are green.
+CI runs the same commands on both SQLite and PostgreSQL, plus the browser smoke tests in a real Chromium. A PR merges only when all are green.
+
+The browser tests (`tests/e2e`) exist because Owner Acceptance Testing found layout and flow problems that the unit tests could not see: they drive the real pages at desktop and 320 px width, check that destructive buttons ask first, and fail on any console error. They are skipped when `pytest-playwright` is not installed, so the plain `uv run pytest` stays zero-setup. Any PR that touches a template or `app.css` should extend them or at least run them, and should also be looked at in a browser before it is pushed.
 
 ## Running the app locally
 

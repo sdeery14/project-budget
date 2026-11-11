@@ -59,6 +59,11 @@ dev = [
   "bandit>=1.8",
   "types-pyyaml>=6.0.12.20261103",
 ]
+# Browser smoke tests (tests/e2e): a real Chromium through Playwright. Optional locally;
+# `uv run playwright install chromium` downloads the browser once.
+e2e = [
+  "pytest-playwright>=0.6",
+]
 
 # ---------------------------------------------------------------------------
 # Build: version comes from the git tag (ADR-010).
@@ -136,7 +141,11 @@ exclude = ["^src/projectbudget/persistence/migrations/versions/"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
 xfail_strict = true
-filterwarnings = ["error"]
+filterwarnings = [
+  "error",
+  # pytest-playwright 0.7 still defines its session fixtures as instance methods (pytest 9 deprecation).
+  "ignore:Session-scoped fixtures defined as instance methods are deprecated:pytest.PytestRemovedIn10Warning",
+]
 markers = [
   "postgres: needs PROJECTBUDGET_TEST_DATABASE_URL pointing at a PostgreSQL server",
 ]
