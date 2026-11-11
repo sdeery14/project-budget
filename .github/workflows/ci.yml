@@ -75,6 +75,29 @@ jobs:
       - run: uv sync --group dev
       - run: uv run pytest --cov --cov-report=term
 
+  ui-smoke:
+    name: UI smoke (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --group dev --group e2e
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+      - name: Browser smoke tests
+        run: uv run pytest tests/e2e --browser chromium --screenshot only-on-failure --output e2e-artifacts
+      - name: Upload screenshots of failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: e2e-artifacts
+          if-no-files-found: ignore
+
   docker:
     name: Container answers /health
     runs-on: ubuntu-latest
