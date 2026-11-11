@@ -230,15 +230,29 @@ def get_requirement(
         return _info(load_requirement(db, requirement_id))
 
 
-def any_active(session_factory: SessionFactory, principal: Principal) -> bool:
-    """Whether any project has an active requirement at all; the backlog's empty state needs it."""
+@dataclass(frozen=True, slots=True)
+class RequirementPresence:
+    """What the backlog's empty state needs to know: is there anything, and is any of it active."""
+
+    any: bool
+    active: bool
+
+
+def presence(session_factory: SessionFactory, principal: Principal) -> RequirementPresence:
     with session_factory() as db:
-        return (
+        any_at_all = db.scalar(select(Requirement.id).limit(1)) is not None
+        active = (
             db.scalar(
                 select(Requirement.id).where(Requirement.intent == Intent.ACTIVE.value).limit(1)
             )
             is not None
         )
+    return RequirementPresence(any=any_at_all, active=active)
+
+
+def any_active(session_factory: SessionFactory, principal: Principal) -> bool:
+    """Whether any project has an active requirement at all."""
+    return presence(session_factory, principal).active
 
 
 def list_requirements(

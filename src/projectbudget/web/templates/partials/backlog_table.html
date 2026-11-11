@@ -41,7 +41,8 @@
     </tr>
     {% else %}
     <tr><td colspan="10" class="muted" id="backlog-empty">
-      {%- if not has_requirements %}Nothing here yet: no project has requirements. <a href="/projects">Create a project and add what it needs</a>; priced items then show up here in buying order.
+      {%- if not presence.any %}Nothing here yet: no project has requirements. <a href="/projects">Create a project and add what it needs</a>; priced items then show up here in buying order.
+      {%- elif not presence.active %}No active requirements: everything is paused, cancelled or archived. Resume one on its <a href="/projects">project page</a> and it shows up here.
       {%- elif backlog.unpriced %}Nothing priced to buy yet: the {{ backlog.unpriced_count }} item{{ "s" if backlog.unpriced_count != 1 else "" }} below need{{ "" if backlog.unpriced_count != 1 else "s" }} a price first.
       {%- else %}Nothing to buy: every active requirement is covered by stock.{% endif %}</td></tr>
     {% endfor %}

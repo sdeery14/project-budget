@@ -18,7 +18,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Fixed
 
-- The backlog's empty state on a fresh workspace says that no project has requirements yet and links to Projects, instead of claiming every requirement is covered by stock (#20).
+- The backlog's empty state on a fresh workspace says that no project has requirements yet and links to Projects, instead of claiming every requirement is covered by stock; when requirements exist but all are paused, cancelled or archived it says so (#20).
 - The timeline no longer shows a red negative "opening balance" or says "blocked" when the only shortfall is the protected reserve and this month's contribution covers it. The first tile is now what is spendable (floored at zero) beside the reserve, the balance basis is one line under the tiles, "blocked" means the first month still cannot buy after its contribution, and the budget page says the contribution is counted in full this month and how to offset one that is already in the balance, with a negative current-month override (#21).
 - A sync reject for a kind or unit the manifest may not change now names the actual reason (confirmed, merged, created by hand, or used by a requirement, purchase, stock or price), links the catalog item and states the two ways out; when every reject shares one cause the preview says so once above the table (#28).
 - A GitHub 404 now says that GitHub reports a private repository as not found without a token and how to set one, instead of a bare status code; the token variable field no longer shows a plausible value as its placeholder (#29, #31).
