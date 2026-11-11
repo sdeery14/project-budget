@@ -45,6 +45,18 @@ class ExistingRequirement:
 
 
 @dataclass(frozen=True, slots=True)
+class ManualRequirement:
+    """A requirement entered by hand in the project this source is attached to (ADR-012)."""
+
+    id: str
+    catalog_item_id: str
+    qty: int
+    priority: int
+    sort_order: int
+    item_name: str
+
+
+@dataclass(frozen=True, slots=True)
 class CatalogState:
     """What the engine needs to know about a catalog item the manifest names."""
 
@@ -82,6 +94,12 @@ class SyncContext:
     as_of: date
     items_by_id: Mapping[str, CatalogState] = field(default_factory=dict)
     """Live catalog items by id, for the requirements this source already has. Identity, not names."""
+    manual: tuple[ManualRequirement, ...] = ()
+    """Hand-entered requirements of the attached project, in project order; none when unattached."""
+    attached: bool = False
+    """The source already has a project (chosen on creation, or created by an earlier apply)."""
+    same_name_projects: tuple[str, ...] = ()
+    """Names of unsynced projects that share the manifest's project name; only read when unattached."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +137,22 @@ class Update:
 
 
 @dataclass(frozen=True, slots=True)
+class Adopt:
+    """A hand-entered requirement for the same catalog item becomes this source's (ADR-012).
+
+    It gains the external id and the source takes qty, priority and order; intent, sharing,
+    notes and consumption history stay as they are.
+    """
+
+    requirement_id: str
+    external_id: str
+    item_name: str
+    changes: tuple[FieldChange, ...]
+    """Requirement fields the manifest sets on adoption: qty, priority, sort_order."""
+    estimate: Money | None
+
+
+@dataclass(frozen=True, slots=True)
 class Archive:
     requirement_id: str
     external_id: str
@@ -143,6 +177,10 @@ class SyncPlan:
     estimate_rejects: tuple[Reject, ...] = ()
     """Items whose estimate was refused while their other fields apply."""
     unchanged: tuple[str, ...] = ()
+    adoptions: tuple[Adopt, ...] = ()
+    """Manual requirements of the attached project that this apply takes over."""
+    warnings: tuple[str, ...] = ()
+    """Things worth knowing before applying; they change nothing by themselves."""
 
     @property
     def reactivations(self) -> tuple[Update, ...]:
@@ -156,12 +194,13 @@ class SyncPlan:
     @property
     def empty(self) -> bool:
         """Nothing to write: applying would change no row."""
-        return not (self.creates or self.updates or self.archives)
+        return not (self.creates or self.updates or self.archives or self.adoptions)
 
     @property
     def counts(self) -> dict[str, int]:
         return {
             "creates": len(self.creates),
+            "adoptions": len(self.adoptions),
             "updates": len(self.updates) - len(self.reactivations),
             "reactivations": len(self.reactivations),
             "archives": len(self.archives),
@@ -208,10 +247,17 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
     }
 
     creates: list[Create] = []
+    adoptions: list[Adopt] = []
     updates: list[Update] = []
     rejects: list[Reject] = []
     estimate_rejects: list[Reject] = []
     unchanged: list[str] = []
+    # The first hand-entered requirement per catalog item is the one a manifest item adopts;
+    # any further one for the same item stays manual.
+    manual_by_item: dict[str, ManualRequirement] = {}
+    for req in ctx.manual:
+        manual_by_item.setdefault(req.catalog_item_id, req)
+    adopted: set[str] = set()
     # What each slug will look like once this plan applies: (kind, unit, external id that set it).
     # A later item in the same manifest that disagrees is a conflict, never a silent reuse.
     pending: dict[str, tuple[ItemKind, str, str]] = {}
@@ -270,6 +316,26 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
         pending.setdefault(slug, (effective[0], effective[1], item.id))
 
         if existing is None:
+            manual = manual_by_item.get(state.id) if state is not None else None
+            if manual is not None and manual.id not in adopted:
+                adopted.add(manual.id)
+                taken = []
+                if manual.qty != item.qty:
+                    taken.append(FieldChange("qty", manual.qty, item.qty))
+                if manual.priority != item.priority:
+                    taken.append(FieldChange("priority", manual.priority, item.priority))
+                if manual.sort_order != position:
+                    taken.append(FieldChange("sort_order", manual.sort_order, position))
+                adoptions.append(
+                    Adopt(
+                        requirement_id=manual.id,
+                        external_id=item.id,
+                        item_name=manual.item_name,
+                        changes=tuple(taken),
+                        estimate=estimate,
+                    )
+                )
+                continue
             rename = leaving.get(item.name.lower())
             creates.append(
                 Create(
@@ -313,6 +379,14 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
         for req in ctx.existing
         if req.external_id not in manifest_ids and req.intent is not Intent.ARCHIVED
     )
+    warnings: list[str] = []
+    if not ctx.attached and ctx.same_name_projects:
+        names = ", ".join(repr(name) for name in ctx.same_name_projects)
+        warnings.append(
+            f"A project named {names} already exists and is not synced. Applying creates a new "
+            f"project {manifest.project_name!r} beside it. To sync the existing project instead, "
+            "detach this source and add it again with that project chosen."
+        )
     return SyncPlan(
         project_id=manifest.project_id,
         project_name=manifest.project_name,
@@ -322,19 +396,25 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
         rejects=tuple(rejects),
         estimate_rejects=tuple(estimate_rejects),
         unchanged=tuple(unchanged),
+        adoptions=tuple(adoptions),
+        warnings=tuple(warnings),
     )
 
 
-def external_ids(entries: Iterable[Create | Update | Archive | Reject]) -> tuple[str, ...]:
+def external_ids(
+    entries: Iterable[Create | Adopt | Update | Archive | Reject],
+) -> tuple[str, ...]:
     return tuple(entry.external_id for entry in entries)
 
 
 __all__ = [
+    "Adopt",
     "Archive",
     "CatalogState",
     "Create",
     "ExistingRequirement",
     "FieldChange",
+    "ManualRequirement",
     "Reject",
     "SyncContext",
     "SyncPlan",

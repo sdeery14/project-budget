@@ -82,6 +82,9 @@ class ProjectOut(BaseModel):
     notes: str
     created_at: datetime
     updated_at: datetime
+    source_id: str | None = Field(
+        default=None, description="The sync source this project follows, when synced."
+    )
 
     @classmethod
     def of(cls, info: ProjectInfo) -> "ProjectOut":
@@ -685,6 +688,10 @@ class SyncSourceIn(Stripped):
     token_env: str | None = Field(
         default=None, description="GitHub only: the NAME of an environment variable."
     )
+    project_id: str | None = Field(
+        default=None,
+        description="An existing, unsynced project to sync into; omit to create one from the manifest.",
+    )
 
 
 class SyncSourceOut(BaseModel):
@@ -789,6 +796,14 @@ class PlanUpdateOut(BaseModel):
     estimate: MoneyOut | None
 
 
+class PlanAdoptOut(BaseModel):
+    requirement_id: str
+    external_id: str
+    item_name: str
+    changes: list[FieldChangeOut]
+    estimate: MoneyOut | None
+
+
 class PlanArchiveOut(BaseModel):
     requirement_id: str
     external_id: str
@@ -806,11 +821,15 @@ class SyncPlanOut(BaseModel):
     empty: bool
     counts: dict[str, int]
     creates: list[PlanCreateOut]
+    adoptions: list[PlanAdoptOut] = Field(
+        description="Manual requirements of the attached project this apply takes over (ADR-012)."
+    )
     updates: list[PlanUpdateOut]
     archives: list[PlanArchiveOut]
     rejects: list[PlanRejectOut]
     estimate_rejects: list[PlanRejectOut]
     unchanged: list[str]
+    warnings: list[str]
     digest: str = Field(description="Pass back as expected_plan_digest when applying.")
 
     @classmethod
@@ -840,6 +859,17 @@ class SyncPlanOut(BaseModel):
                 )
                 for c in plan.creates
             ],
+            adoptions=[
+                PlanAdoptOut(
+                    requirement_id=a.requirement_id,
+                    external_id=a.external_id,
+                    item_name=a.item_name,
+                    changes=changes(a.changes),
+                    estimate=MoneyOut.of(a.estimate) if a.estimate else None,
+                )
+                for a in plan.adoptions
+            ],
+            warnings=list(plan.warnings),
             updates=[
                 PlanUpdateOut(
                     requirement_id=u.requirement_id,

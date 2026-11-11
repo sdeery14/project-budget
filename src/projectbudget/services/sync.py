@@ -14,7 +14,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, exists, select, update
+from sqlalchemy import CursorResult, exists, func, select, update
 from sqlalchemy.orm import Session
 
 from projectbudget.adapters import manifest as manifest_adapter
@@ -45,6 +45,7 @@ from projectbudget.domain.principal import Principal
 from projectbudget.domain.sync import (
     CatalogState,
     ExistingRequirement,
+    ManualRequirement,
     SyncContext,
     SyncPlan,
     plan_sync,
@@ -69,6 +70,7 @@ from projectbudget.services.catalog import (
 )
 from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import NotFoundError, require_write
+from projectbudget.services.projects import load_project
 
 TOKEN_ENV_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,99}$")
 LOCATOR_MAX_LENGTH = 500
@@ -131,6 +133,8 @@ class SourceCreate:
     path: str | None = None
     external_project_id: str | None = None
     token_env: str | None = None
+    project_id: str | None = None
+    """An existing project to sync into; None creates one from the manifest on first apply."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,6 +272,17 @@ def create_source(
     clean = _validate(command, import_dir)
     moment = now or utcnow()
     with session_factory.begin() as db:
+        project: Project | None = None
+        if command.project_id:
+            project = load_project(db, command.project_id)
+            if project.source_id is not None:
+                raise InvalidSourceError(
+                    f"Project {project.name!r} is already synced from a source; detach that first"
+                )
+            if project.archived:
+                raise InvalidSourceError(
+                    f"Project {project.name!r} is archived; unarchive it first"
+                )
         row = SyncSource(
             id=str(uuid.uuid4()),
             kind=clean.kind.value,
@@ -283,7 +298,10 @@ def create_source(
         )
         db.add(row)
         db.flush()
-        return _source_info(row, None)
+        if project is not None:
+            project.source_id = row.id
+            project.updated_at = moment
+        return _source_info(row, project)
 
 
 def get_source(session_factory: SessionFactory, principal: Principal, source_id: str) -> SourceInfo:
@@ -442,6 +460,40 @@ def _context(
         row = db.get(CatalogItem, req.catalog_item_id)
         if row is not None:
             items_by_id[req.catalog_item_id] = state_of(row)
+
+    project = _project_of(db, source.id)
+    manual: tuple[ManualRequirement, ...] = ()
+    same_name: tuple[str, ...] = ()
+    if project is not None:
+        manual_rows = db.execute(
+            select(Requirement, CatalogItem.name)
+            .join(CatalogItem, CatalogItem.id == Requirement.catalog_item_id)
+            .where(Requirement.project_id == project.id, Requirement.source_id.is_(None))
+            .order_by(Requirement.sort_order, Requirement.created_at, Requirement.id)
+        ).all()
+        manual = tuple(
+            ManualRequirement(
+                id=req.id,
+                catalog_item_id=req.catalog_item_id,
+                qty=req.qty,
+                priority=req.priority,
+                sort_order=req.sort_order,
+                item_name=name,
+            )
+            for req, name in manual_rows
+        )
+    else:
+        same_name = tuple(
+            db.scalars(
+                select(Project.name)
+                .where(
+                    func.lower(Project.name) == manifest.project_name.lower(),
+                    Project.source_id.is_(None),
+                    Project.archived.is_(False),
+                )
+                .order_by(Project.created_at, Project.id)
+            ).all()
+        )
     return SyncContext(
         currency=currency,
         manifest=manifest,
@@ -449,6 +501,9 @@ def _context(
         catalog=catalog,
         as_of=as_of,
         items_by_id=items_by_id,
+        manual=manual,
+        attached=project is not None,
+        same_name_projects=same_name,
     )
 
 
@@ -653,6 +708,18 @@ def _apply(
         db.flush()
         if create.estimate is not None:
             add_estimate(row.id, create.estimate)
+
+    for adopt in plan.adoptions:
+        req = db.get(Requirement, adopt.requirement_id)
+        if req is None:
+            continue
+        req.source_id = source.id
+        req.external_id = adopt.external_id
+        for change in adopt.changes:
+            setattr(req, change.field, change.new)
+        req.updated_at = now
+        if adopt.estimate is not None:
+            add_estimate(req.catalog_item_id, adopt.estimate)
 
     for edit in plan.updates:
         req = db.get(Requirement, edit.requirement_id)

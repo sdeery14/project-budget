@@ -18,10 +18,18 @@
     <div><label for="path">Path in repo (GitHub)</label><input id="path" name="path" type="text" maxlength="500" placeholder="project-budget.yaml"></div>
     <div><label for="external_project_id">Project id (CSV)</label><input id="external_project_id" name="external_project_id" type="text" maxlength="100" placeholder="e.g. garden-gate"></div>
     <div><label for="token_env">Token variable (private repo)</label><input id="token_env" name="token_env" type="text" maxlength="100" placeholder="GITHUB_TOKEN"></div>
+    <div><label for="project_id">Project</label>
+      <select id="project_id" name="project_id">
+        <option value="">new project from the manifest</option>
+        {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select></div>
     <button type="submit">Add source</button>
   </form>
   <p class="muted">For a private repository, put a fine-grained read-only token in an environment variable on the
-  server and give its <em>name</em> here; the token itself is never stored.</p>
+  server and give its <em>name</em> here; the token itself is never stored.
+  Choose a project you built by hand to sync the manifest into it: on the first apply, each of its requirements
+  whose catalog item the manifest also names is adopted (the manifest then owns its qty, priority and order; intent,
+  sharing, notes and consumption stay), and the rest stay manual.</p>
 
   <div class="table-wrap">
   <table id="sources">

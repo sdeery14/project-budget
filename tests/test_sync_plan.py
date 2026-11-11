@@ -8,6 +8,7 @@ from projectbudget.domain.money import Money
 from projectbudget.domain.sync import (
     CatalogState,
     ExistingRequirement,
+    ManualRequirement,
     SyncContext,
     plan_sync,
     slug_for,
@@ -98,6 +99,9 @@ def ctx(
     *items: ManifestItem,
     existing_reqs: tuple[ExistingRequirement, ...] = (),
     catalog: dict[str, CatalogState] | None = None,
+    manual: tuple[ManualRequirement, ...] = (),
+    attached: bool = False,
+    same_name: tuple[str, ...] = (),
 ) -> SyncContext:
     manifest = Manifest(version=1, project_id="shed", project_name="Shed", items=tuple(items))
     return SyncContext(
@@ -106,6 +110,22 @@ def ctx(
         existing=existing_reqs,
         catalog=catalog or {},
         as_of=AS_OF,
+        manual=manual,
+        attached=attached,
+        same_name_projects=same_name,
+    )
+
+
+def manual(
+    id_: str, item_id: str, name: str, qty: int = 1, *, priority: int = 2, sort_order: int = 0
+) -> ManualRequirement:
+    return ManualRequirement(
+        id=id_,
+        catalog_item_id=item_id,
+        qty=qty,
+        priority=priority,
+        sort_order=sort_order,
+        item_name=name,
     )
 
 
@@ -341,6 +361,68 @@ def test_the_file_order_is_the_requirement_order() -> None:
     assert plan.unchanged == ()
 
 
+def test_a_manual_requirement_for_the_same_item_is_adopted_not_duplicated() -> None:
+    """ADR-012 (#26): attached project; the manifest takes qty, priority and order, keeps the rest."""
+    plan = plan_sync(
+        ctx(
+            item("saw", "Hand saw", 1),
+            item("clamps", "Hose clamp", 6, priority=1, amount="2.00"),
+            item("glue", "Wood glue", 1),
+            catalog={
+                "hose-clamp": state(
+                    "hose-clamp", "Hose clamp", mine=False, review_state=ReviewState.CONFIRMED
+                ),
+                "hand-saw": state("hand-saw", "Hand saw", mine=False, elsewhere=True),
+            },
+            manual=(
+                manual("req-saw", "item-hand-saw", "Hand saw", 1, sort_order=0),
+                manual("req-clamp", "item-hose-clamp", "Hose clamp", 2, priority=3, sort_order=1),
+                manual("req-clamp-2", "item-hose-clamp", "Hose clamp", 9, sort_order=2),
+                manual("req-tape", "item-tape", "Tape", 1, sort_order=3),
+            ),
+            attached=True,
+        )
+    )
+    assert [(a.requirement_id, a.external_id) for a in plan.adoptions] == [
+        ("req-saw", "saw"),
+        ("req-clamp", "clamps"),
+    ]
+    saw, clamp = plan.adoptions
+    assert saw.changes == ()  # same qty, priority and position already
+    assert [(c.field, c.old, c.new) for c in clamp.changes] == [
+        ("qty", 2, 6),
+        ("priority", 3, 1),
+    ]
+    assert clamp.estimate == Money(200, "USD")
+    # The second manual clamp requirement and the tape stay manual; glue is new.
+    assert [c.external_id for c in plan.creates] == ["glue"]
+    assert plan.counts["adoptions"] == 2
+    assert plan.warnings == ()
+    assert not plan.empty
+
+
+def test_adoption_still_rejects_a_kind_or_unit_the_source_does_not_own() -> None:
+    plan = plan_sync(
+        ctx(
+            item("clamps", "Hose clamp", 6, unit="box"),
+            catalog={"hose-clamp": state("hose-clamp", "Hose clamp", mine=False)},
+            manual=(manual("req-clamp", "item-hose-clamp", "Hose clamp", 2),),
+            attached=True,
+        )
+    )
+    assert plan.adoptions == ()
+    assert [r.external_id for r in plan.rejects] == ["clamps"]
+
+
+def test_an_unattached_source_warns_when_a_project_with_the_manifest_name_exists() -> None:
+    plan = plan_sync(ctx(item("a", "A"), same_name=("Shed",)))
+    (warning,) = plan.warnings
+    assert "'Shed' already exists" in warning
+    assert "detach this source and add it again" in warning
+    assert plan_sync(ctx(item("a", "A"), same_name=("Shed",), attached=True)).warnings == ()
+    assert plan_sync(ctx(item("a", "A"))).warnings == ()
+
+
 def test_counts_summarise_the_plan() -> None:
     plan = plan_sync(
         ctx(
@@ -363,6 +445,7 @@ def test_counts_summarise_the_plan() -> None:
     )
     assert plan.counts == {
         "creates": 1,
+        "adoptions": 0,
         "updates": 0,
         "reactivations": 1,
         "archives": 1,

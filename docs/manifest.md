@@ -39,6 +39,8 @@ A CSV source has fixed columns `id,name,qty,unit,kind,priority,sharing,catalog,e
 | New item id | A requirement; a new unreviewed catalog item unless `catalog` names an existing one (or the name's slug already exists) |
 | Existing id with changed qty or priority | The requirement is updated |
 | Items in a different order | The project's requirements take the file's order, and so does the backlog's default order |
+| Hand-entered requirement for the same catalog item, in the project the source is attached to | Adopted on the first apply: it becomes the source's, with the manifest's qty, priority and order; intent, sharing, notes and consumption stay |
+| Manifest project name matches an existing project that is not synced, and no project was chosen | The plan warns; applying still creates a new project |
 | Existing id with a changed name | The catalog item is renamed while the source owns it (see below); the id and slug never change |
 | Id missing from the file | The requirement is archived with reason `removed_from_source`; purchases and consumption stay |
 | Id back again | The same requirement is reactivated |
@@ -51,6 +53,8 @@ A CSV source has fixed columns `id,name,qty,unit,kind,priority,sharing,catalog,e
 **Who owns which field.** The manifest owns `name`, `qty`, `priority`, the initial `sharing`, the estimate (recorded with origin `manifest` and dated by the file's mtime or the commit date, so a newer manual price keeps winning), and the order of the items within the project. It owns `kind` and `unit` only for a catalog item it created that is still unreviewed and that nothing else references. You own the catalog mapping, intent (active, paused, cancelled, archived), the sharing override, notes and the workspace backlog order; the manifest never changes them. Archiving something yourself keeps it archived even if the manifest still lists it.
 
 **Order matters.** List items in the order you intend to buy them. Within a priority tier the backlog and the timeline follow it (ADR-012), so a part comes after the thing it attaches to when the file says so. Moving a row on the Backlog page overrides the default order for the whole workspace until you move again.
+
+**Attaching to a project you built by hand.** Choose the project when adding the source (the Add source form, or `project_id` on the API). The source then syncs into that project instead of creating one: on the first apply, each hand-entered requirement whose catalog item the manifest also names is adopted, and everything else in the project stays manual and untouched. A manifest item whose catalog item is not in the project is created as usual. A project can follow only one source.
 
 **Detach** removes the source and its run history; the project and its requirements stay and become manual.
 

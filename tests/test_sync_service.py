@@ -235,6 +235,7 @@ def test_changed_manifest_updates_archives_creates_and_records_a_new_estimate(
     assert second.plan is not None
     assert second.plan.counts == {
         "creates": 1,
+        "adoptions": 0,
         "updates": 1,
         "reactivations": 0,
         "archives": 1,
@@ -320,6 +321,108 @@ def test_reordering_the_file_reorders_the_requirements_and_the_backlog(
     assert [(r.qty, r.sort_order) for r in reqs] == [(6, 0), (3, 1)]
     names_after = [row.item.name for row in backlog.get_backlog(session_factory, principal).rows]
     assert names_after == ["Hose clamp", "6 mm fuel line"]
+
+
+def test_attaching_a_source_to_a_hand_built_project_adopts_matching_requirements(
+    session_factory: SessionFactory, principal: Principal, import_dir: Path
+) -> None:
+    """ADR-012 (#26): one project, not two; adopted rows keep what the owner set by hand."""
+    project = projects.create_project(
+        session_factory, principal, projects.ProjectCreate(name="Heater (by hand)"), now=NOW
+    )
+    clamp = catalog.create_item(
+        session_factory,
+        principal,
+        catalog.CatalogItemCreate(name="Hose clamp", kind=ItemKind.REUSABLE),
+    )
+    clamp_req = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(
+            project_id=project.id, qty=2, priority=3, catalog_item_id=clamp.id, notes="stainless"
+        ),
+    )
+    requirements.set_intent(session_factory, principal, clamp_req.id, Intent.PAUSED)
+    tape_req = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=1, item_text="Tape"),
+    )
+
+    source = sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(
+            kind=SourceKind.FILE, locator="heater/project-budget.yaml", project_id=project.id
+        ),
+        import_dir=import_dir,
+        now=NOW,
+    )
+    assert (source.project_id, source.project_name) == (project.id, "Heater (by hand)")
+
+    shown = sync.preview(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    assert shown.plan is not None
+    assert [c.external_id for c in shown.plan.creates] == ["fuel-line"]
+    (adopt,) = shown.plan.adoptions
+    assert (adopt.requirement_id, adopt.external_id, adopt.item_name) == (
+        clamp_req.id,
+        "clamps",
+        "Hose clamp",
+    )
+    assert [(c.field, c.old, c.new) for c in adopt.changes] == [
+        ("qty", 2, 6),
+        ("priority", 3, 1),
+        ("sort_order", 0, 1),
+    ]
+    assert shown.plan.warnings == ()
+
+    result = sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    assert result.run.summary["adoptions"] == 1
+    assert [p.name for p in projects.list_projects(session_factory, principal)] == [
+        "Diesel heater install"  # the manifest owns the project name once attached
+    ]
+    adopted = requirements.get_requirement(session_factory, principal, clamp_req.id)
+    assert (adopted.qty, adopted.priority, adopted.sort_order) == (6, 1, 1)
+    assert (adopted.intent, adopted.notes) == (Intent.PAUSED, "stainless")  # kept
+    tape = requirements.get_requirement(session_factory, principal, tape_req.id)
+    assert (tape.qty, tape.priority) == (1, 2)  # untouched, still manual
+    reqs = requirements.list_requirements(
+        session_factory, principal, project.id, include_inactive=True
+    )
+    assert len(reqs) == 3  # clamp (adopted), tape (manual), fuel line (created)
+
+    # The second apply treats the adopted row as the source's own: no adoption, no duplicate.
+    again = sync.preview(
+        session_factory, principal, source.id, import_dir=import_dir, force=True, now=LATER
+    )
+    assert again.plan is not None
+    assert (again.plan.adoptions, again.plan.creates) == ((), ())
+    assert again.plan.counts["unchanged"] == 2
+
+    with pytest.raises(sync.InvalidSourceError, match="already synced"):
+        sync.create_source(
+            session_factory,
+            principal,
+            sync.SourceCreate(
+                kind=SourceKind.FILE, locator="heater/project-budget.yaml", project_id=project.id
+            ),
+            import_dir=import_dir,
+        )
+
+
+def test_an_unattached_source_warns_about_a_project_with_the_same_name(
+    session_factory: SessionFactory, principal: Principal, source: SourceInfo, import_dir: Path
+) -> None:
+    projects.create_project(
+        session_factory, principal, projects.ProjectCreate(name="diesel heater INSTALL"), now=NOW
+    )
+    shown = sync.preview(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    assert shown.plan is not None
+    assert len(shown.plan.warnings) == 1
+    assert "'diesel heater INSTALL' already exists" in shown.plan.warnings[0]
+    sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    names = sorted(p.name for p in projects.list_projects(session_factory, principal))
+    assert names == ["Diesel heater install", "diesel heater INSTALL"]  # still creates, as warned
 
 
 def test_schema_error_rejects_the_file_and_records_a_rejected_run(

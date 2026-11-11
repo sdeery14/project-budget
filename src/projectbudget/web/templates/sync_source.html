@@ -17,7 +17,7 @@
     <p><strong>Nothing to do.</strong> The source has the same content as the last applied run.</p>
     {% else %}
     <p><strong>Applied</strong> revision <code>{{ result.run.revision[:12] }}</code>:
-      {{ result.plan.counts.creates }} created, {{ result.plan.counts.updates }} updated,
+      {{ result.plan.counts.creates }} created, {{ result.plan.counts.adoptions }} adopted, {{ result.plan.counts.updates }} updated,
       {{ result.plan.counts.reactivations }} reactivated, {{ result.plan.counts.archives }} archived,
       {{ result.plan.counts.rejects }} rejected.
       {% if result.source.project_id %}<a href="/projects/{{ result.source.project_id }}">Open the project</a> · {% endif %}<a href="/backlog">Backlog</a></p>
@@ -47,10 +47,14 @@
       <li><span class="label">Create</span><span class="value">{{ plan.counts.creates }}</span></li>
       <li><span class="label">Update</span><span class="value">{{ plan.counts.updates }}</span></li>
       <li><span class="label">Reactivate</span><span class="value">{{ plan.counts.reactivations }}</span></li>
+      <li><span class="label">Adopt</span><span class="value">{{ plan.counts.adoptions }}</span></li>
       <li><span class="label">Archive</span><span class="value">{{ plan.counts.archives }}</span></li>
       <li><span class="label">Reject</span><span class="value{% if plan.rejects %} neg{% endif %}">{{ plan.counts.rejects }}</span></li>
       <li><span class="label">Unchanged</span><span class="value">{{ plan.counts.unchanged }}</span></li>
     </ul>
+    {% for warning in plan.warnings %}
+    <p class="alert warning" role="status">{{ warning }}</p>
+    {% endfor %}
     <div class="table-wrap">
     <table id="plan">
       <thead><tr><th>Action</th><th>Item id</th><th>Detail</th></tr></thead>
@@ -61,6 +65,11 @@
             {% if c.catalog_exists %}→ existing catalog item <code>{{ c.slug }}</code>{% else %}→ new unreviewed item <code>{{ c.slug }}</code>{% endif %}
             {% if c.estimate %}, estimate {{ c.estimate }}{% endif %}
             {% if c.likely_rename_of %} <span class="badge warn">likely rename of {{ c.likely_rename_of }}</span>{% endif %}</td></tr>
+        {% endfor %}
+        {% for a in plan.adoptions %}
+        <tr><td><span class="badge ok">adopt</span></td><td><code>{{ a.external_id }}</code></td>
+          <td>{{ a.item_name }}: your requirement becomes this source's{% for ch in a.changes %}; {% if ch.field == "sort_order" %}position {{ ch.old + 1 }} → {{ ch.new + 1 }}{% else %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endif %}{% endfor %}
+            {% if a.estimate %}; estimate {{ a.estimate }}{% endif %}</td></tr>
         {% endfor %}
         {% for u in plan.updates %}
         <tr><td><span class="badge ok">{{ "reactivate" if u.reactivate else "update" }}</span></td><td><code>{{ u.external_id }}</code></td>

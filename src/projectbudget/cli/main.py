@@ -247,6 +247,8 @@ def sync_cmd(
         typer.echo(f"  {key}: {value}")
     for reject in (*plan.rejects, *plan.estimate_rejects):
         typer.echo(f"  rejected {reject.external_id}: {reject.reason}")
+    for warning in plan.warnings:
+        typer.echo(f"  warning: {warning}")
 
 
 @app.command()

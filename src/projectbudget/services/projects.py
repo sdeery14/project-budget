@@ -27,6 +27,8 @@ class ProjectInfo:
     notes: str
     created_at: datetime
     updated_at: datetime
+    source_id: str | None = None
+    """The sync source this project follows, when it is synced (ADR-007, ADR-012)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +54,7 @@ def _info(row: Project) -> ProjectInfo:
         notes=row.notes,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        source_id=row.source_id,
     )
 
 
