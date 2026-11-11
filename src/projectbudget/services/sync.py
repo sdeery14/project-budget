@@ -68,6 +68,7 @@ from projectbudget.services.catalog import (
     find_live_by_slug,
     insert_item,
     lock_item,
+    unit_in_use,
 )
 from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import NotFoundError, require_write
@@ -541,6 +542,7 @@ def _context(
             merged=row.merged_into_id is not None,
             created_by_this_source=row.created_by_source_id == source.id,
             references=_references(db, row.id, source.id),
+            unit_locked=unit_in_use(db, row.id),
             manifest_estimate=_manifest_estimate(db, row.id, currency),
         )
 

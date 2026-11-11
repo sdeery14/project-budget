@@ -80,6 +80,7 @@ def state(
     mine: bool = True,
     elsewhere: bool = False,
     manifest_estimate: Money | None = None,
+    unit_locked: bool = False,
 ) -> CatalogState:
     return CatalogState(
         id=f"item-{slug}",
@@ -91,6 +92,7 @@ def state(
         merged=merged,
         created_by_this_source=mine,
         references=("a requirement you entered by hand",) if elsewhere else (),
+        unit_locked=unit_locked,
         manifest_estimate=manifest_estimate,
     )
 
@@ -303,6 +305,35 @@ def test_kind_or_unit_differing_on_an_item_the_source_does_not_own_rejects_that_
     )
     assert plan.shared_reject_cause is None  # four different causes
     assert [c.external_id for c in plan.creates] == ["ok"]
+
+
+def test_a_locked_unit_is_never_recommended_as_a_catalog_edit() -> None:
+    """Review finding on #46: the catalog refuses a unit change once anything is in that unit."""
+    locked = state("wire", "Wire", unit="m", review_state=ReviewState.CONFIRMED, unit_locked=True)
+    free = state("rope", "Rope", unit="m", review_state=ReviewState.CONFIRMED)
+    plan = plan_sync(
+        ctx(
+            item("w", "Wire", unit="ft"),
+            item("r", "Rope", unit="ft"),
+            item("k", "Wire", kind=ItemKind.REUSABLE, unit="ft", catalog="wire"),
+            catalog={"wire": locked, "rope": free},
+        )
+    )
+    by_id = {r.external_id: r for r in plan.rejects}
+    assert by_id["w"].fix == (
+        "Set unit: m in the manifest; the item's unit cannot change on its page while "
+        "requirements, prices, stock or purchases are in 'm'."
+    )
+    assert "on its page" not in by_id["w"].fix.split(";")[0]
+    assert by_id["r"].fix == (
+        "Either change the item's unit to 'ft' on its page, or set unit: m in the manifest."
+    )
+    # Kind and unit together on a locked item: the kind keeps both ways out, the unit one.
+    assert by_id["k"].fix == (
+        "Either change the item's kind to 'reusable' on its page, or set kind: consumable in "
+        "the manifest. Set unit: m in the manifest; the item's unit cannot change on its page "
+        "while requirements, prices, stock or purchases are in 'm'."
+    )
 
 
 def test_rejects_with_one_cause_are_summarised_once() -> None:

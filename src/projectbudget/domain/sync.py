@@ -73,6 +73,9 @@ class CatalogState:
     a purchase, stock movements, a price the owner entered. Empty when nothing does."""
     manifest_estimate: Money | None = None
     """The latest estimate this source already recorded for the item."""
+    unit_locked: bool = False
+    """The catalog refuses a unit change: requirements, prices, stock or purchases are in it
+    (``services.catalog.unit_in_use``), this source's own included."""
 
     @property
     def referenced_elsewhere(self) -> bool:
@@ -278,11 +281,20 @@ def _ownership_reject(
         f"{c.field} {c.new!r} in the manifest, {c.old!r} in the catalog" for c in structural
     )
     because = " and ".join(state.ownership_reasons) or "it is not this source's to change"
-    in_catalog = " and ".join(
-        f"change the item's {c.field} to {c.new!r} on its page" for c in structural
-    )
-    in_manifest = " and ".join(f"set {c.field}: {c.old} in the manifest" for c in structural)
-    fix = f"Either {in_catalog}, or {in_manifest}."
+    fixes = []
+    for c in structural:
+        if c.field == "unit" and state.unit_locked:
+            # The catalog refuses this change too (UnitInUseError), so only one way out.
+            fixes.append(
+                f"Set unit: {c.old} in the manifest; the item's unit cannot change on its page "
+                f"while requirements, prices, stock or purchases are in {c.old!r}."
+            )
+        else:
+            fixes.append(
+                f"Either change the item's {c.field} to {c.new!r} on its page, "
+                f"or set {c.field}: {c.old} in the manifest."
+            )
+    fix = " ".join(fixes)
     return Reject(
         external_id,
         f"{state.name}: {mismatch}; this source may not change it because {because}. {fix}",

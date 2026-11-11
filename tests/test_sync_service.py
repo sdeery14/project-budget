@@ -561,6 +561,15 @@ def test_source_owned_item_follows_kind_and_unit_until_it_is_referenced_elsewher
     assert [r.external_id for r in back.plan.rejects] == ["fuel-line"]
     assert back.plan.rejects[0].because == "it is used by stock movements"
     assert catalog.get_item(session_factory, principal, fuel.id).unit == "ft"
+    # The advice must be something the catalog allows: the unit is locked by the stock
+    # (and the requirement), so only the manifest can give way (review finding on #46).
+    fix = back.plan.rejects[0].fix or ""
+    assert fix.startswith("Set unit: ft in the manifest; the item's unit cannot change")
+    assert "change the item's unit" not in fix
+    with pytest.raises(catalog.UnitInUseError):
+        catalog.update_item(
+            session_factory, principal, fuel.id, catalog.CatalogItemUpdate(unit="m")
+        )
 
 
 def test_apply_refuses_when_the_source_changed_since_the_preview(
