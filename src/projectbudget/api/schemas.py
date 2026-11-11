@@ -282,7 +282,7 @@ class BacklogRowOut(BaseModel):
     net_shortfall: int
     unit_price: MoneyOut | None
     line_total: MoneyOut | None = Field(
-        description="Net shortfall at the current estimate; null when unpriced (ADR-012)."
+        description="Net shortfall at the current estimate; 0 when nothing is left to buy; null when that needs a price (ADR-012)."
     )
     on_order_cost: MoneyOut | None = Field(
         description="Money on open orders for this item at the purchases' prices; null when none."
@@ -324,7 +324,7 @@ class BacklogOut(BaseModel):
         description="Still to buy: net line totals of priced rows; a lower bound when anything is unpriced."
     )
     committed: MoneyOut = Field(
-        description="Money already on open orders for the rows shown, at the purchases' prices."
+        description="Money on open orders for every item, at the purchases' prices; independent of which rows show."
     )
     lower_bound: bool
     unpriced_count: int

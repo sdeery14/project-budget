@@ -75,6 +75,7 @@ class ItemFacts:
 @dataclass(frozen=True, slots=True)
 class BacklogRow:
     item: ItemFacts
+    currency: str
     needed: int
     gross_shortfall: int
     priority: int
@@ -102,10 +103,13 @@ class BacklogRow:
 
     @property
     def line_total(self) -> Money | None:
-        """Net shortfall at the current estimate, or None when unpriced (ADR-012).
+        """Net shortfall at the current estimate, or None when that needs a price (ADR-012).
 
-        Zero for a priced row that is fully on order: nothing more to buy for it.
+        Zero whenever nothing is left to buy, which needs no estimate: a fully ordered row
+        has a 0.00 line total with or without a price.
         """
+        if self.net_shortfall == 0:
+            return Money.zero(self.currency)
         if self.item.unit_price is None:
             return None
         return self.item.unit_price * self.net_shortfall
@@ -124,27 +128,30 @@ class BacklogRow:
     def priced(self) -> bool:
         return self.item.unit_price is not None
 
+    @property
+    def needs_price(self) -> bool:
+        """Something is left to buy and there is no estimate to sum or schedule it with."""
+        return self.item.unit_price is None and self.net_shortfall > 0
+
 
 @dataclass(frozen=True, slots=True)
 class Backlog:
     currency: str
     rows: tuple[BacklogRow, ...]
-    """Priced rows with gross shortfall > 0, in backlog order."""
+    """Rows with gross shortfall > 0 that can be summed, in backlog order."""
     unpriced: tuple[BacklogRow, ...]
     """The "needs a price" bucket: counted, never summed, never scheduled."""
+    committed: Money
+    """Money on open orders for every item, at the purchases' prices (ADR-012).
+
+    Independent of what the backlog shows: an order stays committed while it is open even
+    when stock now covers the requirement and the row has left.
+    """
 
     @property
     def total(self) -> Money:
-        """Still to buy: priced net line totals. A lower bound whenever ``unpriced`` is non-empty."""
+        """Still to buy: net line totals of ``rows``. A lower bound whenever ``unpriced`` is non-empty."""
         return sum_money((row.line_total for row in self.rows if row.line_total), self.currency)
-
-    @property
-    def committed(self) -> Money:
-        """Money already on open orders for the rows shown, at the purchases' actual prices."""
-        return sum_money(
-            (row.on_order_cost for row in (*self.rows, *self.unpriced) if row.on_order_cost),
-            self.currency,
-        )
 
     @property
     def unpriced_count(self) -> int:
@@ -210,6 +217,7 @@ def consolidate(
     between projects.
     """
     project_position = {project_id: index for index, project_id in enumerate(project_order)}
+    items = list(items)
     by_item: dict[str, list[RequirementLine]] = {}
     for line in lines:
         if line.active:
@@ -228,6 +236,7 @@ def consolidate(
         rows.append(
             BacklogRow(
                 item=item,
+                currency=currency,
                 needed=needed_quantity(item.kind, contributing),
                 gross_shortfall=shortfall,
                 priority=row_priority(contributing),
@@ -249,6 +258,7 @@ def consolidate(
     )
     return Backlog(
         currency=currency,
-        rows=tuple(row for row in rows if row.priced),
-        unpriced=tuple(row for row in rows if not row.priced),
+        rows=tuple(row for row in rows if not row.needs_price),
+        unpriced=tuple(row for row in rows if row.needs_price),
+        committed=sum_money((item.on_order_cost for item in items if item.on_order_cost), currency),
     )

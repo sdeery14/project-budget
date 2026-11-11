@@ -225,6 +225,28 @@ def test_acceptance_4b_partial_receipt_leaves_the_remainder_on_order(
     assert any(">1</td>" in c for c in cells)  # on order
     assert ">on order</span>" in clamp_row
     assert 'id="backlog-committed">12.50 USD' in page
+
+    # The unpriced hinge set, fully ordered: nothing left to buy, so it needs no price now.
+    purchases.record_purchase(
+        session_factory,
+        principal,
+        purchases.PurchaseCreate(
+            lines=(purchases.PurchaseLineCreate(canonical.hinge_set.id, 1, Money(2000, "USD")),),
+            status=PurchaseStatus.ORDERED,
+            ordered_on=date(2026, 11, 8),
+        ),
+    )
+    result = backlog.get_backlog(session_factory, principal)
+    assert result.unpriced == ()
+    assert not result.is_lower_bound
+    assert result.committed == Money(3250, "USD")
+    page = logged_in.get("/backlog").text
+    hinge_row = _row_html(page, f'id="row-{canonical.hinge_set.id}"')
+    assert ">on order</span>" in hinge_row
+    assert ">0.00</td>" in hinge_row
+    assert "—" in hinge_row  # no unit price to show
+    assert 'id="unpriced-count">0<' in page
+    assert 'id="backlog-committed">32.50 USD' in page
     # Net shortfall 0: the forecast schedules nothing for the clamps while the order is open.
     result = forecast.get_forecast(session_factory, principal, today=date(2026, 11, 8))
     assert result is not None

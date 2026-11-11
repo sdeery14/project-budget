@@ -118,6 +118,14 @@ def test_money_figures_net_out_open_orders_and_show_them_as_committed(
     assert received.committed == Money(1100, "USD")
     assert received.total == result.total
 
+    # Stock now covers the clamps and the row leaves; the open order is still committed.
+    inventory.adjust(
+        session_factory, principal, canonical.clamp.id, 1, occurred_on=date(2026, 11, 9)
+    )
+    covered = backlog.get_backlog(session_factory, principal)
+    assert canonical.clamp.id not in {row.item.id for row in (*covered.rows, *covered.unpriced)}
+    assert covered.committed == Money(1100, "USD")
+
 
 def test_default_order_follows_project_then_requirement_order(
     session_factory: SessionFactory, principal: Principal

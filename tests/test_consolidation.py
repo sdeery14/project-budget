@@ -186,6 +186,44 @@ def test_committed_money_counts_unpriced_rows_too_and_nothing_without_an_order()
     assert backlog.total == Money(100, USD)
 
 
+def test_committed_money_does_not_depend_on_which_rows_show() -> None:
+    """An open order stays committed when stock now covers the item and its row has left."""
+    covered = item("a", ItemKind.CONSUMABLE, on_hand=5, on_order=2, on_order_cost="22.00")
+    orphan = item("b", ItemKind.CONSUMABLE, on_order=1, on_order_cost="4.00")  # no requirement
+    backlog = consolidate([covered, orphan], [line("a", 2)], order=[], currency=USD)
+    assert backlog.rows == ()
+    assert backlog.unpriced == ()
+    assert backlog.committed == Money(2600, USD)
+    assert backlog.total == Money.zero(USD)
+
+
+def test_a_fully_ordered_item_without_an_estimate_needs_no_price() -> None:
+    """Nothing is left to buy, so the row sums as zero, shows its ordered state and is not
+    counted as needing a price; once something is left to buy again it is."""
+    backlog = consolidate(
+        [item("a", ItemKind.CONSUMABLE, on_order=2, on_order_cost="9.00")],
+        [line("a", 2)],
+        order=[],
+        currency=USD,
+    )
+    (row,) = backlog.rows
+    assert backlog.unpriced == ()
+    assert (row.fully_ordered, row.needs_price, row.priced) == (True, False, False)
+    assert (row.unit_price, row.line_total) == (None, Money.zero(USD))
+    assert (backlog.total, backlog.committed) == (Money.zero(USD), Money(900, USD))
+    assert not backlog.is_lower_bound
+
+    partly = consolidate(
+        [item("a", ItemKind.CONSUMABLE, on_order=1, on_order_cost="4.50")],
+        [line("a", 2)],
+        order=[],
+        currency=USD,
+    )
+    assert [row.item.id for row in partly.unpriced] == ["a"]
+    assert partly.unpriced[0].line_total is None
+    assert partly.is_lower_bound
+
+
 def test_unpriced_items_go_to_their_own_bucket_and_never_sum_as_zero() -> None:
     backlog = consolidate(
         [
