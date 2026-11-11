@@ -67,9 +67,21 @@ class Settings(BaseSettings):
         ),
     )
 
+    github_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Default token for GitHub sync sources of private repositories (#30). Read from "
+            "the environment or .env, never stored; a source's own token variable overrides it."
+        ),
+    )
+
     @property
     def effective_sync_import_dir(self) -> Path:
         return (self.sync_import_dir or self.data_dir / "imports").expanduser()
+
+    @property
+    def effective_github_token(self) -> str | None:
+        return self.github_token.get_secret_value() if self.github_token else None
 
     @property
     def effective_database_url(self) -> str:

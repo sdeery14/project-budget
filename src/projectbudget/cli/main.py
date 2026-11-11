@@ -217,7 +217,12 @@ def sync_cmd(
         try:
             if dry_run:
                 shown = sync.preview(
-                    factory, principal, source_id, import_dir=import_dir, force=force
+                    factory,
+                    principal,
+                    source_id,
+                    import_dir=import_dir,
+                    force=force,
+                    github_token=settings.effective_github_token,
                 )
                 plan = shown.plan
                 if shown.noop or plan is None:
@@ -226,7 +231,12 @@ def sync_cmd(
                 typer.echo(f"Plan for {shown.fetched.description} (dry run, nothing applied):")
             else:
                 result = sync.apply(
-                    factory, principal, source_id, import_dir=import_dir, force=force
+                    factory,
+                    principal,
+                    source_id,
+                    import_dir=import_dir,
+                    force=force,
+                    github_token=settings.effective_github_token,
                 )
                 plan = result.plan
                 if result.noop or plan is None:
@@ -243,6 +253,8 @@ def sync_cmd(
             raise typer.Exit(code=1) from exc
     finally:
         engine.dispose()
+    for change in plan.project_changes:
+        typer.echo(f"  project {change.field}: {change.old} -> {change.new}")
     for key, value in plan.counts.items():
         typer.echo(f"  {key}: {value}")
     for reject in (*plan.rejects, *plan.estimate_rejects):

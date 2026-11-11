@@ -27,6 +27,7 @@ Every setting is an environment variable with the `PROJECTBUDGET_` prefix, or a 
 | `PROJECTBUDGET_HOST` / `PORT` | `127.0.0.1` / `8000` | bind address |
 | `PROJECTBUDGET_SECURE_COOKIES` | `true` | keep on; browsers treat `localhost` as secure |
 | `PROJECTBUDGET_SYNC_IMPORT_DIR` | `<data dir>/imports` | the only directory file and CSV sync sources may read |
+| `PROJECTBUDGET_GITHUB_TOKEN` | unset | one read-only token for private GitHub sync sources; see "GitHub tokens" |
 
 ## Behind a reverse proxy
 
@@ -81,6 +82,22 @@ Do this once after installing and again before every upgrade, so you know it wor
 ## Health and monitoring
 
 `GET /health` needs no login and reports `{"status": "ok", "database": "ok", "version": "..."}`, or 503 with `"degraded"` when the database does not answer. The container's `HEALTHCHECK` uses it. There is no telemetry; the app makes no outbound request except GitHub sync when you trigger it.
+
+## GitHub tokens
+
+A public repository needs no token. GitHub answers **404** for a private repository when the request carries no token, so "not found" on a repository you can open in the browser means "no token" or "a token that does not cover this repository"; the preview message says which.
+
+**One token for all private repositories.** Create a fine-grained personal access token on GitHub: *Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token*. Resource owner: your account. Repository access: *Only select repositories*, then pick every repository that holds a `project-budget.yaml`. Permissions → Repository permissions → **Contents: Read-only** (Metadata: Read-only is added automatically). Set an expiry you will remember. Copy the token once; GitHub never shows it again.
+
+Give it to the server as `PROJECTBUDGET_GITHUB_TOKEN`. Every GitHub source uses it unless the source names its own token variable, which is the override for a repository under another account. The token is read from the environment at fetch time and is never stored in the database, the export or the logs.
+
+| How you run the server | Where the token goes |
+| --- | --- |
+| `uvx projectbudget run` / `uv run projectbudget run` | `PROJECTBUDGET_GITHUB_TOKEN=...` exported in the shell that starts the server, or a line in `.env` in the working directory (`.env` is read for `PROJECTBUDGET_*` only; never commit it) |
+| Docker | `docker run -e PROJECTBUDGET_GITHUB_TOKEN=... ghcr.io/sdeery14/projectbudget`, or `--env-file .env` |
+| Compose | `environment:` entry on the app service, or `env_file: .env` beside `compose.yaml` |
+
+Restart the server after setting or changing the variable; it is read from the process environment. To rotate, generate a new token, set the variable, restart, then delete the old token on GitHub.
 
 ## Sync sources on disk
 

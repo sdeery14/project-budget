@@ -39,6 +39,10 @@ class SourceFetchError(Exception):
     """The source could not be read: missing file, path outside the import directory, HTTP error."""
 
 
+class GitHubNotFoundError(SourceFetchError):
+    """GitHub answered 404: a wrong locator, or a private repository fetched without a token."""
+
+
 @dataclass(frozen=True, slots=True)
 class FetchedManifest:
     content: bytes
@@ -131,6 +135,8 @@ def default_getter(url: str, headers: dict[str, str]) -> bytes:
         with _https_opener().open(request, timeout=GITHUB_TIMEOUT_SECONDS) as response:
             return bytes(response.read(MAX_FETCH_BYTES + 1))
     except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise GitHubNotFoundError(f"GitHub answered 404 for {parts.path}") from exc
         raise SourceFetchError(f"GitHub answered {exc.code} for {parts.path}") from exc
     except urllib.error.URLError as exc:
         raise SourceFetchError(f"Cannot reach GitHub: {exc.reason}") from exc

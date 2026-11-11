@@ -58,3 +58,15 @@ def test_password_is_not_shown_in_repr(tmp_path: Path) -> None:
         data_dir=tmp_path,
     )
     assert "s3cret" not in repr(settings)
+
+
+def test_github_token_comes_from_the_environment_and_stays_out_of_repr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("PROJECTBUDGET_GITHUB_TOKEN", raising=False)
+    assert Settings(data_dir=tmp_path).effective_github_token is None
+    monkeypatch.setenv("PROJECTBUDGET_GITHUB_TOKEN", "github_pat_secret")
+    settings = Settings(data_dir=tmp_path)
+    assert settings.effective_github_token == "github_pat_secret"
+    assert "github_pat_secret" not in repr(settings)
+    assert "github_pat_secret" not in str(settings)

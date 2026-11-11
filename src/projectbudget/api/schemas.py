@@ -695,6 +695,18 @@ class SyncSourceIn(Stripped):
     )
 
 
+class SyncSourceUpdateIn(Stripped):
+    """Editable settings; a field that is absent or null keeps its value, an empty string clears it."""
+
+    branch: str | None = None
+    path: str | None = None
+    external_project_id: str | None = None
+    token_env: str | None = Field(
+        default=None,
+        description="GitHub only: the NAME of an environment variable, or '' for the server default.",
+    )
+
+
 class SyncSourceOut(BaseModel):
     id: str
     kind: SourceKind
@@ -831,6 +843,9 @@ class SyncPlanOut(BaseModel):
     estimate_rejects: list[PlanRejectOut]
     unchanged: list[str]
     warnings: list[str]
+    project_changes: list[FieldChangeOut] = Field(
+        description="Name or external id the attached project takes from the manifest."
+    )
     digest: str = Field(description="Pass back as expected_plan_digest when applying.")
 
     @classmethod
@@ -871,6 +886,7 @@ class SyncPlanOut(BaseModel):
                 for a in plan.adoptions
             ],
             warnings=list(plan.warnings),
+            project_changes=changes(plan.project_changes),
             updates=[
                 PlanUpdateOut(
                     requirement_id=u.requirement_id,

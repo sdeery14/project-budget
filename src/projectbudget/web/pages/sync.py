@@ -32,6 +32,7 @@ def _list_context(request: Request, principal: Principal, **extra: Any) -> dict[
         "kinds": list(SourceKind),
         "projects": [p for p in projects.list_projects(factory, principal) if p.source_id is None],
         "import_dir": app_settings(request).effective_sync_import_dir,
+        "default_token_set": app_settings(request).effective_github_token is not None,
         **extra,
     }
 
@@ -43,6 +44,7 @@ def _detail_context(
     return {
         "source": sync.get_source(factory, principal, source_id),
         "runs": sync.list_runs(factory, principal, source_id),
+        "default_token_set": app_settings(request).effective_github_token is not None,
         "preview": None,
         "result": None,
         "content_b64": None,
@@ -130,6 +132,35 @@ def source_page(request: Request, principal: Owner, source_id: str) -> HTMLRespo
     return render(request, "sync_source.html", _detail_context(request, principal, source_id))
 
 
+# token_env is the NAME of an environment variable, never a secret.
+@router.post(SYNC_PATH + "/{source_id}/settings", response_class=HTMLResponse)
+def update_source(  # nosec B107
+    request: Request,
+    principal: Owner,
+    source_id: str,
+    branch: Annotated[str, Form()] = "",
+    path: Annotated[str, Form()] = "",
+    external_project_id: Annotated[str, Form()] = "",
+    token_env: Annotated[str, Form()] = "",
+) -> Response:
+    try:
+        sync.update_source(
+            session_factory(request),
+            principal,
+            source_id,
+            sync.SourceUpdate(
+                branch=branch or None,
+                path=path or None,
+                external_project_id=external_project_id or None,
+                token_env=token_env or None,
+            ),
+            import_dir=app_settings(request).effective_sync_import_dir,
+        )
+    except USER_ERRORS as exc:
+        return _detail_error(request, principal, source_id, exc)
+    return RedirectResponse(f"{SYNC_PATH}/{source_id}", status_code=303)
+
+
 @router.post(SYNC_PATH + "/{source_id}/preview", response_class=HTMLResponse)
 async def preview(
     request: Request,
@@ -147,6 +178,7 @@ async def preview(
             import_dir=app_settings(request).effective_sync_import_dir,
             fetched=fetched,
             force=force,
+            github_token=app_settings(request).effective_github_token,
         )
     except USER_ERRORS as exc:
         return _detail_error(request, principal, source_id, exc)
@@ -178,6 +210,7 @@ def apply(
             expected_content_hash=expected_content_hash or None,
             expected_plan_digest=expected_plan_digest or None,
             force=force,
+            github_token=app_settings(request).effective_github_token,
         )
     except USER_ERRORS as exc:
         return _detail_error(request, principal, source_id, exc)

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from projectbudget.adapters.sources import FetchedManifest, SourceFetchError
+from projectbudget.adapters.sources import FetchedManifest, GitHubNotFoundError, SourceFetchError
 from projectbudget.domain.catalog import (
     REMOVED_FROM_SOURCE,
     EstimateOrigin,
@@ -21,6 +21,7 @@ from projectbudget.domain.catalog import (
 )
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
+from projectbudget.persistence.models import Project
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services import (
     backlog,
@@ -593,6 +594,262 @@ def test_missing_file_and_missing_token_variable(
     monkeypatch.delenv("PB_TEST_TOKEN", raising=False)
     with pytest.raises(SourceFetchError, match="PB_TEST_TOKEN"):
         sync.preview(session_factory, principal, github.id, import_dir=import_dir)
+
+
+class RecordingGitHub:
+    """Stands in for GitHubClient: records the token each fetch used, or answers 404."""
+
+    def __init__(self, *, not_found: bool = False) -> None:
+        self.not_found = not_found
+        self.tokens: list[str | None] = []
+
+    def fetch(
+        self, locator: str, *, branch: str | None, path: str | None, token: str | None
+    ) -> FetchedManifest:
+        self.tokens.append(token)
+        if self.not_found:
+            raise GitHubNotFoundError(f"GitHub answered 404 for /repos/{locator}/commits")
+        return fetched(MANIFEST_V1, revision="abc123")
+
+
+def test_github_sources_use_the_server_default_token_unless_they_name_their_own(
+    session_factory: SessionFactory,
+    principal: Principal,
+    import_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#30: one PROJECTBUDGET_GITHUB_TOKEN for every source; a per-source variable overrides it."""
+    plain = sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(SourceKind.GITHUB, "o/r"),
+        import_dir=import_dir,
+    )
+    own = sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(SourceKind.GITHUB, "other/repo", token_env="PB_OTHER_TOKEN"),
+        import_dir=import_dir,
+    )
+    monkeypatch.setenv("PB_OTHER_TOKEN", "token-for-other")
+    github = RecordingGitHub()
+    sync.preview(
+        session_factory,
+        principal,
+        plain.id,
+        import_dir=import_dir,
+        github=github,  # type: ignore[arg-type]
+        github_token="server-default",
+    )
+    sync.preview(
+        session_factory,
+        principal,
+        own.id,
+        import_dir=import_dir,
+        github=github,  # type: ignore[arg-type]
+        github_token="server-default",
+    )
+    sync.preview(
+        session_factory,
+        principal,
+        plain.id,
+        import_dir=import_dir,
+        github=github,  # type: ignore[arg-type]
+    )
+    assert github.tokens == ["server-default", "token-for-other", None]
+
+
+def test_a_github_404_explains_the_missing_or_insufficient_token(
+    session_factory: SessionFactory, principal: Principal, import_dir: Path
+) -> None:
+    """#29: GitHub answers 404 for a private repository without a token; say so."""
+    source = sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(SourceKind.GITHUB, "o/r"),
+        import_dir=import_dir,
+    )
+    github = RecordingGitHub(not_found=True)
+    with pytest.raises(SourceFetchError) as without:
+        sync.preview(
+            session_factory,
+            principal,
+            source.id,
+            import_dir=import_dir,
+            github=github,  # type: ignore[arg-type]
+        )
+    message = str(without.value)
+    assert message.startswith("GitHub answered 404 for /repos/o/r/commits")
+    assert "private repository as not found" in message
+    assert "PROJECTBUDGET_GITHUB_TOKEN" in message
+    assert "docs/operations.md" in message
+
+    with pytest.raises(SourceFetchError) as with_token:
+        sync.preview(
+            session_factory,
+            principal,
+            source.id,
+            import_dir=import_dir,
+            github=github,  # type: ignore[arg-type]
+            github_token="server-default",
+        )
+    assert "does not cover this repository" in str(with_token.value)
+    assert "server-default" not in str(with_token.value)
+
+
+def test_source_settings_can_be_changed_in_place(
+    session_factory: SessionFactory, principal: Principal, import_dir: Path
+) -> None:
+    """#29: branch, path and token variable are editable; kind and locator are not."""
+    source = sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(SourceKind.GITHUB, "o/r"),
+        import_dir=import_dir,
+    )
+    changed = sync.update_source(
+        session_factory,
+        principal,
+        source.id,
+        sync.SourceUpdate(branch="main", path="budget/project-budget.yaml", token_env="MY_TOKEN"),
+        import_dir=import_dir,
+        now=LATER,
+    )
+    assert (changed.branch, changed.path, changed.token_env) == (
+        "main",
+        "budget/project-budget.yaml",
+        "MY_TOKEN",
+    )
+    assert (changed.kind, changed.locator, changed.updated_at) == (SourceKind.GITHUB, "o/r", LATER)
+    assert sync.get_source(session_factory, principal, source.id) == changed
+
+    cleared = sync.update_source(
+        session_factory, principal, source.id, sync.SourceUpdate(), import_dir=import_dir
+    )
+    assert (cleared.branch, cleared.path, cleared.token_env) == (None, "project-budget.yaml", None)
+
+    with pytest.raises(sync.InvalidSourceError, match="NAME"):
+        sync.update_source(
+            session_factory,
+            principal,
+            source.id,
+            sync.SourceUpdate(token_env="ghp_pasted_the_token"),
+            import_dir=import_dir,
+        )
+    with pytest.raises(sync.InvalidSourceError, match="Branch"):
+        sync.update_source(
+            session_factory,
+            principal,
+            source.id,
+            sync.SourceUpdate(branch="bad branch"),
+            import_dir=import_dir,
+        )
+    assert (
+        sync.get_source(session_factory, principal, source.id) == cleared
+    )  # refused edits change nothing
+
+    csv = sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(SourceKind.CSV, "heater/items.csv", external_project_id="garden-gate"),
+        import_dir=import_dir,
+    )
+    with pytest.raises(sync.InvalidSourceError, match="external project id"):
+        sync.update_source(
+            session_factory, principal, csv.id, sync.SourceUpdate(), import_dir=import_dir
+        )
+    with pytest.raises(sync.InvalidSourceError, match="Only GitHub"):
+        sync.update_source(
+            session_factory,
+            principal,
+            csv.id,
+            sync.SourceUpdate(external_project_id="garden-gate", token_env="X"),
+            import_dir=import_dir,
+        )
+    renamed = sync.update_source(
+        session_factory,
+        principal,
+        csv.id,
+        sync.SourceUpdate(external_project_id="side-gate"),
+        import_dir=import_dir,
+    )
+    assert renamed.external_project_id == "side-gate"
+
+
+def test_changing_the_csv_project_id_plans_and_applies_without_force(
+    session_factory: SessionFactory, principal: Principal, import_dir: Path
+) -> None:
+    """Review finding on #45: the setting lives on the source, so same bytes is not "no-op"."""
+    (import_dir / "heater" / "items.csv").write_text(
+        "id,name,qty,unit,kind,priority,sharing,catalog,estimate\n"
+        "clamps,Hose clamp,6,each,reusable,1,shared,,\n",
+        encoding="utf-8",
+    )
+    csv = sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(SourceKind.CSV, "heater/items.csv", external_project_id="old-project"),
+        import_dir=import_dir,
+        now=NOW,
+    )
+    first = sync.apply(session_factory, principal, csv.id, import_dir=import_dir, now=NOW)
+    project_id = first.source.project_id or ""
+
+    def external_id() -> str | None:
+        with session_factory() as db:
+            project = db.get(Project, project_id)
+            return project.external_id if project else None
+
+    assert external_id() == "old-project"
+    sync.update_source(
+        session_factory,
+        principal,
+        csv.id,
+        sync.SourceUpdate(external_project_id="new-project"),
+        import_dir=import_dir,
+    )
+    shown = sync.preview(session_factory, principal, csv.id, import_dir=import_dir, now=LATER)
+    assert not shown.noop
+    assert shown.plan is not None
+    # A CSV project is named after its id, so both the name and the external id move.
+    assert [(c.field, c.old, c.new) for c in shown.plan.project_changes] == [
+        ("name", "old-project", "new-project"),
+        ("external_id", "old-project", "new-project"),
+    ]
+    assert not shown.plan.empty  # the page offers Apply for this
+    assert shown.plan.counts["unchanged"] == 1
+    result = sync.apply(session_factory, principal, csv.id, import_dir=import_dir, now=LATER)
+    assert result.run.status is RunStatus.APPLIED
+    assert external_id() == "new-project"
+    # Nothing changed since: the shortcut is back.
+    assert sync.preview(session_factory, principal, csv.id, import_dir=import_dir).noop
+
+    # A settings save that changes nothing keeps the shortcut.
+    sync.update_source(
+        session_factory,
+        principal,
+        csv.id,
+        sync.SourceUpdate(external_project_id="new-project"),
+        import_dir=import_dir,
+    )
+    assert sync.preview(session_factory, principal, csv.id, import_dir=import_dir).noop
+
+
+def test_a_project_renamed_in_the_manifest_is_a_plan_row(
+    session_factory: SessionFactory, principal: Principal, source: SourceInfo, import_dir: Path
+) -> None:
+    sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    renamed = MANIFEST_V1.replace("name: Diesel heater install", "name: Heater, diesel")
+    shown = sync.preview(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=fetched(renamed)
+    )
+    assert shown.plan is not None
+    assert [(c.field, c.new) for c in shown.plan.project_changes] == [("name", "Heater, diesel")]
+    assert not shown.plan.empty
+    sync.apply(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=fetched(renamed)
+    )
+    assert sync.get_source(session_factory, principal, source.id).project_name == "Heater, diesel"
 
 
 def test_detach_keeps_the_project_and_requirements_as_manual(

@@ -39,6 +39,8 @@ class LiveServer:
     url: str
     username: str
     password: str
+    import_dir: Path
+    """Where file sync sources are read from; tests may drop manifests here."""
 
 
 def _free_port() -> int:
@@ -71,7 +73,12 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveServer
             raise RuntimeError("the e2e server did not start")
         time.sleep(0.05)
     try:
-        yield LiveServer(url=f"http://127.0.0.1:{port}", username=USERNAME, password=PASSWORD)
+        yield LiveServer(
+            url=f"http://127.0.0.1:{port}",
+            username=USERNAME,
+            password=PASSWORD,
+            import_dir=settings.effective_sync_import_dir,
+        )
     finally:
         server.should_exit = True
         thread.join(timeout=10)

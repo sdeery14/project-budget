@@ -6,6 +6,13 @@
   <p class="muted"><a href="/sync">All sources</a>
     {% if source.project_id %} · project <a href="/projects/{{ source.project_id }}">{{ source.project_name }}</a>{% endif %}
     {% if source.last_revision %} · last applied revision <code>{{ source.last_revision[:12] }}</code>{% endif %}</p>
+  {% if source.kind.value == "github" %}
+  <p class="muted" id="token-state">Token:
+    {%- if source.token_env %} from the server's environment variable <code>{{ source.token_env }}</code>.
+    {%- elif default_token_set %} the server's default (<code>PROJECTBUDGET_GITHUB_TOKEN</code>).
+    {%- else %} <strong>none</strong>; only a public repository can be read until <code>PROJECTBUDGET_GITHUB_TOKEN</code> is set on the server or a token variable is named below.
+    {%- endif %}</p>
+  {% endif %}
   {% if error %}
   <div class="alert error" role="alert"><p>{{ error }}</p>
     {% if issues %}<ul>{% for issue in issues %}<li>{{ issue }}</li>{% endfor %}</ul>{% endif %}</div>
@@ -23,6 +30,21 @@
       {% if result.source.project_id %}<a href="/projects/{{ result.source.project_id }}">Open the project</a> · {% endif %}<a href="/backlog">Backlog</a></p>
     {% endif %}
   </div>
+  {% endif %}
+
+  {% if source.kind.value != "file" %}
+  <h2>Settings</h2>
+  <form method="post" action="/sync/{{ source.id }}/settings" class="row" id="source-settings">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if source.kind.value == "github" %}
+    <div><label for="branch">Branch</label><input id="branch" name="branch" type="text" maxlength="200" value="{{ source.branch or '' }}" placeholder="default branch"></div>
+    <div><label for="path">Path in repo</label><input id="path" name="path" type="text" maxlength="500" value="{{ source.path or '' }}" placeholder="project-budget.yaml"></div>
+    <div><label for="token_env">Token variable</label><input id="token_env" name="token_env" type="text" maxlength="100" value="{{ source.token_env or '' }}" placeholder="blank: server default"></div>
+    {% else %}
+    <div><label for="external_project_id">Project id (CSV)</label><input id="external_project_id" name="external_project_id" type="text" maxlength="100" value="{{ source.external_project_id or '' }}" required></div>
+    {% endif %}
+    <button type="submit">Save settings</button>
+  </form>
   {% endif %}
 
   <h2>Preview</h2>
@@ -59,6 +81,10 @@
     <table id="plan">
       <thead><tr><th>Action</th><th>Item id</th><th>Detail</th></tr></thead>
       <tbody>
+        {% if plan.project_changes %}
+        <tr><td><span class="badge ok">project</span></td><td><code>{{ plan.project_id }}</code></td>
+          <td>{% for ch in plan.project_changes %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>
+        {% endif %}
         {% for c in plan.creates %}
         <tr><td><span class="badge ok">create</span></td><td><code>{{ c.external_id }}</code></td>
           <td>{{ c.item.name }}: {{ c.item.qty }} {{ c.item.unit }}, P{{ c.item.priority }}, {{ c.item.kind.value }}
@@ -109,15 +135,15 @@
 
 <section class="card">
   <h2>Runs</h2>
-  <table id="runs">
+  <table id="runs" class="responsive">
     <thead><tr><th>When (UTC)</th><th>Status</th><th>Revision</th><th>Summary</th></tr></thead>
     <tbody>
       {% for run in runs %}
       <tr>
-        <td>{{ run.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
-        <td><span class="badge{% if run.status.value in ('rejected', 'failed') %} warn{% endif %}">{{ run.status.value }}</span></td>
-        <td>{% if run.revision %}<code>{{ run.revision[:12] }}</code>{% endif %}</td>
-        <td>{% for key, value in run.summary.items() %}{{ key }}: {{ value if value is not iterable or value is string else value | join("; ") }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+        <td data-label="When (UTC)">{{ run.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td data-label="Status"><span class="badge{% if run.status.value in ('rejected', 'failed') %} warn{% endif %}">{{ run.status.value }}</span></td>
+        <td data-label="Revision">{% if run.revision %}<code>{{ run.revision[:12] }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td data-label="Summary"><span>{% for key, value in run.summary.items() %}{{ key }}: {{ value if value is not iterable or value is string else value | join("; ") }}{% if not loop.last %} · {% endif %}{% endfor %}</span></td>
       </tr>
       {% else %}
       <tr><td colspan="4" class="muted">No runs yet.</td></tr>

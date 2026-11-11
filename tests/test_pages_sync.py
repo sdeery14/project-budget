@@ -184,6 +184,44 @@ def test_add_source_into_an_existing_project_shows_adoptions(logged_in: TestClie
     assert "Shed by hand" not in projects_page  # renamed by the manifest, not duplicated
 
 
+def test_github_source_page_says_which_token_it_uses_and_lets_you_change_settings(
+    logged_in: TestClient,
+) -> None:
+    """#31: the placeholder cannot pass for a value; #29: settings are editable in place."""
+    csrf = _csrf(logged_in)
+    form = logged_in.get("/sync").text
+    assert 'placeholder="GITHUB_TOKEN"' not in form
+    assert 'placeholder="name of a variable, e.g. MY_GITHUB_TOKEN"' in form
+    assert "PROJECTBUDGET_GITHUB_TOKEN" in form
+
+    created = logged_in.post(
+        "/sync", data={"csrf_token": csrf, "kind": "github", "locator": "someone/repo"}
+    )
+    assert created.status_code == 303
+    source_id = created.headers["location"].rsplit("/", 1)[1]
+    page = logged_in.get(f"/sync/{source_id}").text
+    assert 'id="token-state"' in page
+    assert "<strong>none</strong>" in page  # the test server has no default token
+    assert 'id="source-settings"' in page
+
+    saved = logged_in.post(
+        f"/sync/{source_id}/settings",
+        data={"csrf_token": csrf, "branch": "main", "path": "", "token_env": "MY_GITHUB_TOKEN"},
+    )
+    assert saved.status_code == 303
+    page = logged_in.get(f"/sync/{source_id}").text
+    assert "environment variable <code>MY_GITHUB_TOKEN</code>" in page
+    assert 'value="main"' in page
+
+    refused = logged_in.post(
+        f"/sync/{source_id}/settings",
+        data={"csrf_token": csrf, "branch": "main", "token_env": "ghp_pasted"},
+    )
+    assert refused.status_code == 422
+    assert "NAME" in refused.text
+    assert logged_in.get("/sync/nope/settings").status_code in (404, 405)
+
+
 def test_add_source_validation_renders_the_error(logged_in: TestClient) -> None:
     csrf = _csrf(logged_in)
     bad = logged_in.post(

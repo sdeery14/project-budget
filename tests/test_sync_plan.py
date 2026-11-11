@@ -102,6 +102,7 @@ def ctx(
     manual: tuple[ManualRequirement, ...] = (),
     attached: bool = False,
     same_name: tuple[str, ...] = (),
+    project: tuple[str | None, str | None] = ("Shed", "shed"),
 ) -> SyncContext:
     manifest = Manifest(version=1, project_id="shed", project_name="Shed", items=tuple(items))
     return SyncContext(
@@ -113,6 +114,8 @@ def ctx(
         manual=manual,
         attached=attached,
         same_name_projects=same_name,
+        project_name=project[0] if attached else None,
+        project_external_id=project[1] if attached else None,
     )
 
 
@@ -450,6 +453,38 @@ def test_adoption_still_rejects_a_kind_or_unit_the_source_does_not_own() -> None
     )
     assert plan.adoptions == ()
     assert [r.external_id for r in plan.rejects] == ["clamps"]
+
+
+def test_a_changed_project_name_or_id_is_a_plan_row_so_apply_is_offered() -> None:
+    """Review finding on #45: a project-level change alone must not read as "nothing to do"."""
+    same = plan_sync(
+        ctx(
+            item("a", "A"),
+            existing_reqs=(existing("a", "A", item_id="item-a"),),
+            catalog={"a": state("a", "A")},
+            attached=True,
+        )
+    )
+    assert same.project_changes == ()
+    assert same.empty
+
+    renamed = plan_sync(
+        ctx(
+            item("a", "A"),
+            existing_reqs=(existing("a", "A", item_id="item-a"),),
+            catalog={"a": state("a", "A")},
+            attached=True,
+            project=("Old shed", "old-shed"),
+        )
+    )
+    assert [(c.field, c.old, c.new) for c in renamed.project_changes] == [
+        ("name", "Old shed", "Shed"),
+        ("external_id", "old-shed", "shed"),
+    ]
+    assert not renamed.empty
+    assert renamed.counts["unchanged"] == 1
+    # Unattached: there is no project yet, so nothing to rename.
+    assert plan_sync(ctx(item("a", "A"))).project_changes == ()
 
 
 def test_an_unattached_source_warns_when_a_project_with_the_manifest_name_exists() -> None:

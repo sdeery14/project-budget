@@ -17,7 +17,7 @@
     <div><label for="branch">Branch (GitHub)</label><input id="branch" name="branch" type="text" maxlength="200" placeholder="default branch"></div>
     <div><label for="path">Path in repo (GitHub)</label><input id="path" name="path" type="text" maxlength="500" placeholder="project-budget.yaml"></div>
     <div><label for="external_project_id">Project id (CSV)</label><input id="external_project_id" name="external_project_id" type="text" maxlength="100" placeholder="e.g. garden-gate"></div>
-    <div><label for="token_env">Token variable (private repo)</label><input id="token_env" name="token_env" type="text" maxlength="100" placeholder="GITHUB_TOKEN"></div>
+    <div><label for="token_env">Token variable (GitHub, optional)</label><input id="token_env" name="token_env" type="text" maxlength="100" placeholder="name of a variable, e.g. MY_GITHUB_TOKEN" aria-describedby="token-help"></div>
     <div><label for="project_id">Project</label>
       <select id="project_id" name="project_id">
         <option value="">new project from the manifest</option>
@@ -25,22 +25,26 @@
       </select></div>
     <button type="submit">Add source</button>
   </form>
-  <p class="muted">For a private repository, put a fine-grained read-only token in an environment variable on the
-  server and give its <em>name</em> here; the token itself is never stored.
+  <p class="muted" id="token-help">Private repositories need a token. {% if default_token_set %}This server has a default token
+  (<code>PROJECTBUDGET_GITHUB_TOKEN</code>); leave the token variable blank to use it.{% else %}Set
+  <code>PROJECTBUDGET_GITHUB_TOKEN</code> on the server and every GitHub source uses it with the token variable left blank.{% endif %}
+  Fill the token variable only for a repository that needs a different token: it is the <em>name</em> of an environment
+  variable on the server, never the token itself, which is never stored. Branch, path and token variable can be changed
+  later on the source page.
   Choose a project you built by hand to sync the manifest into it: on the first apply, each of its requirements
   whose catalog item the manifest also names is adopted (the manifest then owns its qty, priority and order; intent,
   sharing, notes and consumption stay), and the rest stay manual.</p>
 
   <div class="table-wrap">
-  <table id="sources">
+  <table id="sources" class="responsive">
     <thead><tr><th>Source</th><th>Kind</th><th>Project</th><th>Last revision</th></tr></thead>
     <tbody>
       {% for s in sources %}
       <tr id="source-{{ s.id }}">
-        <td><a href="/sync/{{ s.id }}">{{ s.label }}</a></td>
-        <td><span class="badge">{{ s.kind.value }}</span></td>
-        <td>{% if s.project_id %}<a href="/projects/{{ s.project_id }}">{{ s.project_name }}</a>{% else %}<span class="muted">not synced yet</span>{% endif %}</td>
-        <td>{% if s.last_revision %}<code>{{ s.last_revision[:12] }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td data-label="Source"><a href="/sync/{{ s.id }}">{{ s.label }}</a></td>
+        <td data-label="Kind"><span class="badge">{{ s.kind.value }}</span></td>
+        <td data-label="Project">{% if s.project_id %}<a href="/projects/{{ s.project_id }}">{{ s.project_name }}</a>{% else %}<span class="muted">not synced yet</span>{% endif %}</td>
+        <td data-label="Last revision">{% if s.last_revision %}<code>{{ s.last_revision[:12] }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
       </tr>
       {% else %}
       <tr><td colspan="4" class="muted">No sources yet.</td></tr>

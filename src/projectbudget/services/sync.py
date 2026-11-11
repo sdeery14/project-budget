@@ -21,6 +21,7 @@ from projectbudget.adapters import manifest as manifest_adapter
 from projectbudget.adapters.sources import (
     FetchedManifest,
     GitHubClient,
+    GitHubNotFoundError,
     SourceFetchError,
     fetch_file,
     resolve_import_path,
@@ -135,6 +136,19 @@ class SourceCreate:
     token_env: str | None = None
     project_id: str | None = None
     """An existing project to sync into; None creates one from the manifest on first apply."""
+
+
+@dataclass(frozen=True, slots=True)
+class SourceUpdate:
+    """The editable settings of a source; kind and locator are its identity and never change.
+
+    Every field is the new whole value: blank clears it.
+    """
+
+    branch: str | None = None
+    path: str | None = None
+    external_project_id: str | None = None
+    token_env: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +319,44 @@ def create_source(
         return _source_info(row, project)
 
 
+def update_source(
+    session_factory: SessionFactory,
+    principal: Principal,
+    source_id: str,
+    command: SourceUpdate,
+    *,
+    import_dir: Path,
+    now: datetime | None = None,
+) -> SourceInfo:
+    """Change branch, path, token variable or CSV project id in place (#29)."""
+    require_write(principal)
+    with session_factory.begin() as db:
+        row = _load_source(db, source_id)
+        clean = _validate(
+            SourceCreate(
+                kind=SourceKind(row.kind),
+                locator=row.locator,
+                branch=command.branch,
+                path=command.path,
+                external_project_id=command.external_project_id,
+                token_env=command.token_env,
+            ),
+            import_dir,
+        )
+        before = (row.branch, row.path, row.external_project_id)
+        row.branch = clean.branch
+        row.path = clean.path
+        row.external_project_id = clean.external_project_id
+        row.token_env = clean.token_env
+        if (row.branch, row.path, row.external_project_id) != before:
+            # What the source means has changed even if the bytes have not (a CSV project id
+            # lives on the source, not in the file): the next preview must plan, not shortcut.
+            row.last_content_hash = None
+        row.updated_at = now or utcnow()
+        db.flush()
+        return _source_info(row, _project_of(db, row.id))
+
+
 def get_source(session_factory: SessionFactory, principal: Principal, source_id: str) -> SourceInfo:
     with session_factory() as db:
         row = _load_source(db, source_id)
@@ -350,16 +402,48 @@ def list_runs(
 # --- fetch and parse --------------------------------------------------------------------------
 
 
+OPS_GUIDE_HINT = "see docs/operations.md, section GitHub tokens"
+
+
 def fetch(
-    source: SourceInfo, *, import_dir: Path, github: GitHubClient | None = None
+    source: SourceInfo,
+    *,
+    import_dir: Path,
+    github: GitHubClient | None = None,
+    github_token: str | None = None,
 ) -> FetchedManifest:
-    """Read the source. GitHub tokens come from the named environment variable at this moment only."""
+    """Read the source. A GitHub token is read at this moment only and never stored.
+
+    ``github_token`` is the server's default (``PROJECTBUDGET_GITHUB_TOKEN``); a source
+    that names its own token variable uses that instead (#30).
+    """
     if source.kind is SourceKind.GITHUB:
-        token = os.environ.get(source.token_env) if source.token_env else None
-        if source.token_env and not token:
-            raise SourceFetchError(f"Environment variable {source.token_env} is not set")
+        if source.token_env:
+            token = os.environ.get(source.token_env)
+            if not token:
+                raise SourceFetchError(
+                    f"Environment variable {source.token_env} is not set on the server; "
+                    f"set it and restart, or clear the source's token variable to use the "
+                    f"server's default token ({OPS_GUIDE_HINT})"
+                )
+        else:
+            token = github_token
         client = github or GitHubClient()
-        return client.fetch(source.locator, branch=source.branch, path=source.path, token=token)
+        try:
+            return client.fetch(source.locator, branch=source.branch, path=source.path, token=token)
+        except GitHubNotFoundError as exc:
+            if token is None:
+                raise SourceFetchError(
+                    f"{exc}. GitHub reports a private repository as not found when the request "
+                    "carries no token. For a private repository set PROJECTBUDGET_GITHUB_TOKEN "
+                    "on the server, or a token variable on this source, and restart the server "
+                    f"({OPS_GUIDE_HINT}). For a public repository, check the owner/repo, branch and path."
+                ) from exc
+            raise SourceFetchError(
+                f"{exc}. The token does not cover this repository (a fine-grained token lists "
+                "the repositories it may read), or the owner/repo, branch or path is wrong "
+                f"({OPS_GUIDE_HINT})."
+            ) from exc
     return fetch_file(source.locator, import_dir)
 
 
@@ -505,6 +589,8 @@ def _context(
         manual=manual,
         attached=project is not None,
         same_name_projects=same_name,
+        project_name=project.name if project is not None else None,
+        project_external_id=project.external_id if project is not None else None,
     )
 
 
@@ -606,12 +692,15 @@ def preview(
     fetched: FetchedManifest | None = None,
     force: bool = False,
     github: GitHubClient | None = None,
+    github_token: str | None = None,
     now: datetime | None = None,
 ) -> SyncPreview:
     """Fetch, parse and diff without writing anything but the run record for no-ops and rejects."""
     moment = now or utcnow()
     source = get_source(session_factory, principal, source_id)
-    content = fetched or fetch(source, import_dir=import_dir, github=github)
+    content = fetched or fetch(
+        source, import_dir=import_dir, github=github, github_token=github_token
+    )
     currency = workspace.get_currency(session_factory)
     if not force and content.content_hash == source.last_content_hash:
         with session_factory.begin() as db:
@@ -781,6 +870,7 @@ def apply(
     expected_plan_digest: str | None = None,
     force: bool = False,
     github: GitHubClient | None = None,
+    github_token: str | None = None,
     now: datetime | None = None,
 ) -> SyncResult:
     """Fetch, plan and apply in one transaction; the run is recorded as applied, noop or failed.
@@ -798,6 +888,7 @@ def apply(
         fetched=fetched,
         force=force,
         github=github,
+        github_token=github_token,
         now=moment,
     )
     if expected_content_hash is not None and shown.fetched.content_hash != expected_content_hash:
