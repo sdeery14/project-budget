@@ -21,6 +21,7 @@ from projectbudget.domain.catalog import (
 )
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
+from projectbudget.persistence.models import Project
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services import (
     backlog,
@@ -773,6 +774,82 @@ def test_source_settings_can_be_changed_in_place(
         import_dir=import_dir,
     )
     assert renamed.external_project_id == "side-gate"
+
+
+def test_changing_the_csv_project_id_plans_and_applies_without_force(
+    session_factory: SessionFactory, principal: Principal, import_dir: Path
+) -> None:
+    """Review finding on #45: the setting lives on the source, so same bytes is not "no-op"."""
+    (import_dir / "heater" / "items.csv").write_text(
+        "id,name,qty,unit,kind,priority,sharing,catalog,estimate\n"
+        "clamps,Hose clamp,6,each,reusable,1,shared,,\n",
+        encoding="utf-8",
+    )
+    csv = sync.create_source(
+        session_factory,
+        principal,
+        sync.SourceCreate(SourceKind.CSV, "heater/items.csv", external_project_id="old-project"),
+        import_dir=import_dir,
+        now=NOW,
+    )
+    first = sync.apply(session_factory, principal, csv.id, import_dir=import_dir, now=NOW)
+    project_id = first.source.project_id or ""
+
+    def external_id() -> str | None:
+        with session_factory() as db:
+            project = db.get(Project, project_id)
+            return project.external_id if project else None
+
+    assert external_id() == "old-project"
+    sync.update_source(
+        session_factory,
+        principal,
+        csv.id,
+        sync.SourceUpdate(external_project_id="new-project"),
+        import_dir=import_dir,
+    )
+    shown = sync.preview(session_factory, principal, csv.id, import_dir=import_dir, now=LATER)
+    assert not shown.noop
+    assert shown.plan is not None
+    # A CSV project is named after its id, so both the name and the external id move.
+    assert [(c.field, c.old, c.new) for c in shown.plan.project_changes] == [
+        ("name", "old-project", "new-project"),
+        ("external_id", "old-project", "new-project"),
+    ]
+    assert not shown.plan.empty  # the page offers Apply for this
+    assert shown.plan.counts["unchanged"] == 1
+    result = sync.apply(session_factory, principal, csv.id, import_dir=import_dir, now=LATER)
+    assert result.run.status is RunStatus.APPLIED
+    assert external_id() == "new-project"
+    # Nothing changed since: the shortcut is back.
+    assert sync.preview(session_factory, principal, csv.id, import_dir=import_dir).noop
+
+    # A settings save that changes nothing keeps the shortcut.
+    sync.update_source(
+        session_factory,
+        principal,
+        csv.id,
+        sync.SourceUpdate(external_project_id="new-project"),
+        import_dir=import_dir,
+    )
+    assert sync.preview(session_factory, principal, csv.id, import_dir=import_dir).noop
+
+
+def test_a_project_renamed_in_the_manifest_is_a_plan_row(
+    session_factory: SessionFactory, principal: Principal, source: SourceInfo, import_dir: Path
+) -> None:
+    sync.apply(session_factory, principal, source.id, import_dir=import_dir, now=NOW)
+    renamed = MANIFEST_V1.replace("name: Diesel heater install", "name: Heater, diesel")
+    shown = sync.preview(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=fetched(renamed)
+    )
+    assert shown.plan is not None
+    assert [(c.field, c.new) for c in shown.plan.project_changes] == [("name", "Heater, diesel")]
+    assert not shown.plan.empty
+    sync.apply(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=fetched(renamed)
+    )
+    assert sync.get_source(session_factory, principal, source.id).project_name == "Heater, diesel"
 
 
 def test_detach_keeps_the_project_and_requirements_as_manual(

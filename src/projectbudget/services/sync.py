@@ -343,10 +343,15 @@ def update_source(
             ),
             import_dir,
         )
+        before = (row.branch, row.path, row.external_project_id)
         row.branch = clean.branch
         row.path = clean.path
         row.external_project_id = clean.external_project_id
         row.token_env = clean.token_env
+        if (row.branch, row.path, row.external_project_id) != before:
+            # What the source means has changed even if the bytes have not (a CSV project id
+            # lives on the source, not in the file): the next preview must plan, not shortcut.
+            row.last_content_hash = None
         row.updated_at = now or utcnow()
         db.flush()
         return _source_info(row, _project_of(db, row.id))
@@ -584,6 +589,8 @@ def _context(
         manual=manual,
         attached=project is not None,
         same_name_projects=same_name,
+        project_name=project.name if project is not None else None,
+        project_external_id=project.external_id if project is not None else None,
     )
 
 

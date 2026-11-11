@@ -98,6 +98,10 @@ class SyncContext:
     """Hand-entered requirements of the attached project, in project order; none when unattached."""
     attached: bool = False
     """The source already has a project (chosen on creation, or created by an earlier apply)."""
+    project_name: str | None = None
+    """The attached project's current name; the manifest renames it when they differ."""
+    project_external_id: str | None = None
+    """The attached project's current external id (manifest project id, or CSV source setting)."""
     same_name_projects: tuple[str, ...] = ()
     """Names of unsynced projects that share the manifest's project name; only read when unattached."""
 
@@ -181,6 +185,8 @@ class SyncPlan:
     """Manual requirements of the attached project that this apply takes over."""
     warnings: tuple[str, ...] = ()
     """Things worth knowing before applying; they change nothing by themselves."""
+    project_changes: tuple[FieldChange, ...] = ()
+    """Name or external id the attached project takes from the manifest (or the CSV setting)."""
 
     @property
     def reactivations(self) -> tuple[Update, ...]:
@@ -194,7 +200,9 @@ class SyncPlan:
     @property
     def empty(self) -> bool:
         """Nothing to write: applying would change no row."""
-        return not (self.creates or self.updates or self.archives or self.adoptions)
+        return not (
+            self.creates or self.updates or self.archives or self.adoptions or self.project_changes
+        )
 
     @property
     def counts(self) -> dict[str, int]:
@@ -378,6 +386,14 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
         for req in ctx.existing
         if req.external_id not in manifest_ids and req.intent is not Intent.ARCHIVED
     )
+    project_changes: list[FieldChange] = []
+    if ctx.attached:
+        if ctx.project_name != manifest.project_name:
+            project_changes.append(FieldChange("name", ctx.project_name, manifest.project_name))
+        if ctx.project_external_id != manifest.project_id:
+            project_changes.append(
+                FieldChange("external_id", ctx.project_external_id, manifest.project_id)
+            )
     warnings: list[str] = []
     if not ctx.attached and ctx.same_name_projects:
         names = ", ".join(repr(name) for name in ctx.same_name_projects)
@@ -397,6 +413,7 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
         unchanged=tuple(unchanged),
         adoptions=tuple(adoptions),
         warnings=tuple(warnings),
+        project_changes=tuple(project_changes),
     )
 
 

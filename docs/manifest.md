@@ -41,6 +41,7 @@ A CSV source has fixed columns `id,name,qty,unit,kind,priority,sharing,catalog,e
 | Items in a different order | The project's requirements take the file's order, and so does the backlog's default order |
 | Hand-entered requirement for the same catalog item, in the project the source is attached to | Adopted on the first apply: it becomes the source's, with the manifest's qty, priority and order; intent, sharing, notes and consumption stay |
 | Manifest project name matches an existing project that is not synced, and no project was chosen | The plan warns; applying still creates a new project |
+| Project name or id changed in the file (or the CSV project id on the source) | The plan shows a `project` row; applying renames the synced project |
 | Existing id with a changed name | The catalog item is renamed while the source owns it (see below); the id and slug never change |
 | Id missing from the file | The requirement is archived with reason `removed_from_source`; purchases and consumption stay |
 | Id back again | The same requirement is reactivated |

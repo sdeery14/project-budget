@@ -81,6 +81,10 @@
     <table id="plan">
       <thead><tr><th>Action</th><th>Item id</th><th>Detail</th></tr></thead>
       <tbody>
+        {% if plan.project_changes %}
+        <tr><td><span class="badge ok">project</span></td><td><code>{{ plan.project_id }}</code></td>
+          <td>{% for ch in plan.project_changes %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>
+        {% endif %}
         {% for c in plan.creates %}
         <tr><td><span class="badge ok">create</span></td><td><code>{{ c.external_id }}</code></td>
           <td>{{ c.item.name }}: {{ c.item.qty }} {{ c.item.unit }}, P{{ c.item.priority }}, {{ c.item.kind.value }}
