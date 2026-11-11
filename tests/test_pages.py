@@ -18,9 +18,37 @@ def test_home_is_the_backlog(logged_in: TestClient) -> None:
     home = logged_in.get("/")
     assert home.status_code == 200
     assert "<h1>Backlog</h1>" in home.text
-    assert "Nothing to buy" in home.text
-    assert 'href="/projects"' in home.text
+    # A fresh workspace has no requirements: say so and point at Projects (#20).
+    assert "Nothing here yet: no project has requirements" in home.text
+    assert "Nothing to buy" not in home.text
+    assert 'id="backlog-empty"' in home.text
+    assert '<a href="/projects">Create a project and add what it needs</a>' in home.text
     assert 'href="/catalog"' in home.text
+
+
+def test_backlog_says_covered_by_stock_only_once_requirements_exist(
+    logged_in: TestClient,
+) -> None:
+    csrf = csrf_token_from(logged_in.get("/projects").text)
+    project = logged_in.post("/projects", data={"csrf_token": csrf, "name": "Shed"})
+    project_id = project.headers["location"].rsplit("/", 1)[1]
+    logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "item_text": "Hand saw", "qty": "1"},
+    )
+    unpriced = logged_in.get("/backlog").text
+    # The only requirement is unpriced: the main table says why it is empty, not "covered".
+    assert "Nothing priced to buy yet: the 1 item below needs a price first." in unpriced
+    assert "covered by stock" not in unpriced
+    item_id = unpriced.split('href="/catalog/')[1].split('"')[0]
+    stocked = logged_in.post(
+        f"/catalog/{item_id}/adjustments",
+        data={"csrf_token": csrf, "delta": "1", "occurred_on": "2026-11-08", "note": "found one"},
+    )
+    assert stocked.status_code in (200, 303), stocked.text
+    covered = logged_in.get("/backlog").text
+    assert "Nothing to buy: every active requirement is covered by stock." in covered
+    assert "Nothing here yet" not in covered
 
 
 def test_core_journey_through_the_pages(logged_in: TestClient) -> None:
