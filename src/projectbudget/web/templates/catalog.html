@@ -19,19 +19,19 @@
   </form>
 
   <div class="table-wrap">
-  <table id="catalog-items">
+  <table id="catalog-items" class="responsive">
     <thead><tr><th>Item</th><th>Slug</th><th>Kind</th><th>Unit</th><th>Review</th><th class="num">On hand</th><th class="num">Unit price</th><th>As of</th></tr></thead>
     <tbody>
       {% for row in rows %}
       <tr>
-        <td><a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a></td>
-        <td><code>{{ row.item.slug }}</code></td>
-        <td>{{ row.item.kind.value }}</td>
-        <td>{{ row.item.unit }}</td>
-        <td>{{ row.item.review_state.value }}</td>
-        <td class="num">{{ row.on_hand }}</td>
-        <td class="num">{% if row.estimate %}{{ row.estimate.price }}{% else %}<span class="muted">no price</span>{% endif %}</td>
-        <td>{% if row.estimate %}{{ row.estimate.as_of.isoformat() }}{% endif %}</td>
+        <td data-label="Item"><a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a></td>
+        <td data-label="Slug"><code>{{ row.item.slug }}</code></td>
+        <td data-label="Kind">{{ row.item.kind.value }}</td>
+        <td data-label="Unit">{{ row.item.unit }}</td>
+        <td data-label="Review">{{ row.item.review_state.value }}</td>
+        <td class="num" data-label="On hand">{{ row.on_hand }}</td>
+        <td class="num" data-label="Unit price">{% if row.estimate %}{{ row.estimate.price }}{% else %}<span class="muted">no price</span>{% endif %}</td>
+        <td data-label="As of">{% if row.estimate %}{{ row.estimate.as_of.isoformat() }}{% endif %}</td>
       </tr>
       {% else %}
       <tr><td colspan="8" class="muted">No items yet. They also appear here when you type a new one on a project.</td></tr>

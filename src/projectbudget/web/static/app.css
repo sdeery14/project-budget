@@ -37,6 +37,7 @@ body {
 }
 a { color: var(--accent); }
 code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; }
+code { overflow-wrap: anywhere; }
 pre { padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; }
 pre.secret { user-select: all; }
 
@@ -45,7 +46,8 @@ pre.secret { user-select: all; }
   padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); background: var(--surface);
 }
 .brand { font-weight: 700; text-decoration: none; color: var(--text); }
-.site-header nav { display: flex; align-items: center; gap: 1rem; }
+.site-header nav { display: flex; align-items: center; flex-wrap: wrap; column-gap: 1rem; row-gap: 0.25rem; }
+.site-header nav a, .site-header nav button { white-space: nowrap; }
 .site-footer { padding: 1rem; color: var(--muted); font-size: 0.875rem; text-align: center; }
 main { max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem; }
 
@@ -68,10 +70,10 @@ button.link { background: none; color: var(--accent); margin: 0; padding: 0; bor
 form.inline { display: inline; }
 form.row { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin-bottom: 1.5rem; }
 form.row label { margin-top: 0; }
-form.row input[type="text"] { width: 16rem; }
-form.row input[type="number"] { width: 6rem; }
-form.row input[type="date"] { width: 11rem; }
-form.row select { width: auto; }
+form.row input[type="text"] { width: 16rem; max-width: 100%; }
+form.row input[type="number"] { width: 6rem; max-width: 100%; }
+form.row input[type="date"] { width: 11rem; max-width: 100%; }
+form.row select { width: auto; max-width: 100%; }
 form.row textarea { width: 100%; }
 form.row .grow { flex: 1 1 12rem; }
 form.row .grow input[type="text"] { width: 100%; }
@@ -134,3 +136,24 @@ tr.blocked td { color: var(--muted); }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Phones (issue #15): nothing wider than the screen. Inline forms become one field per line and
+ * tables marked .responsive become one block per row, each cell labelled from its data-label. The
+ * table header is kept for screen readers but hidden from view. */
+@media (max-width: 40rem) {
+  main { padding: 1rem 0.75rem; }
+  .card { padding: 1rem; }
+  form.row > * { flex: 1 1 100%; }
+  form.row input[type="text"], form.row input[type="number"], form.row input[type="date"], form.row select { width: 100%; }
+  form.row button { width: 100%; }
+  table.responsive thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  table.responsive, table.responsive tbody, table.responsive tr, table.responsive td { display: block; width: 100%; }
+  table.responsive tr { padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+  table.responsive td { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.15rem 0; border: 0; text-align: left; overflow-wrap: anywhere; }
+  table.responsive td.num, table.responsive td.money { text-align: right; }
+  table.responsive td::before { content: attr(data-label); flex: 0 0 auto; color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+  table.responsive td:not([data-label])::before, table.responsive td[data-label=""]::before { content: none; }
+  table.responsive td.actions { justify-content: flex-start; }
+  table.responsive td[colspan] { display: block; }
+  .inline-list { text-align: right; }
+}

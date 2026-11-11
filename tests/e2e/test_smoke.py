@@ -121,12 +121,39 @@ def test_pages_render_without_console_errors(
 
 
 @pytest.mark.parametrize("path", PAGES)
-@pytest.mark.xfail(
-    reason="#15: the nav and fixed-width inputs overflow at phone width", strict=True
-)
 def test_pages_fit_a_phone_without_sideways_scrolling(
     phone: Page, live_server: LiveServer, path: str
 ) -> None:
     phone.goto(f"{live_server.url}{path}")
     width = phone.evaluate("() => document.documentElement.scrollWidth")
     assert width <= PHONE_WIDTH, f"{path} is {width}px wide at {PHONE_WIDTH}px"
+
+
+def test_backlog_is_a_real_table_on_a_desktop(signed_in: Page, live_server: LiveServer) -> None:
+    """The phone rules must not leak upward: header and body columns line up at 1280 px (#15)."""
+    signed_in.goto(f"{live_server.url}/backlog")
+    widths = signed_in.evaluate(
+        """() => {
+            const t = document.querySelector('#backlog-rows');
+            const w = cells => [...cells].map(c => Math.round(c.getBoundingClientRect().width));
+            return {display: getComputedStyle(t).display,
+                    head: w(t.tHead.rows[0].cells), body: w(t.tBodies[0].rows[0].cells)};
+        }"""
+    )
+    assert widths["display"] == "table"
+    assert widths["head"] == widths["body"]
+
+
+def test_backlog_rows_stack_on_a_phone(phone: Page, live_server: LiveServer) -> None:
+    """The columns that answer the question stay on screen instead of scrolling away (#15)."""
+    phone.goto(f"{live_server.url}/backlog")
+    row = phone.locator("#backlog-rows tbody tr").first
+    box = row.bounding_box()
+    assert box is not None
+    assert box["x"] + box["width"] <= PHONE_WIDTH
+    for label in ("Shortfall", "Unit price", "Line total"):
+        cell = row.locator(f'td[data-label="{label}"]')
+        expect(cell).to_be_visible()
+        cell_box = cell.bounding_box()
+        assert cell_box is not None, label
+        assert cell_box["x"] + cell_box["width"] <= PHONE_WIDTH, label

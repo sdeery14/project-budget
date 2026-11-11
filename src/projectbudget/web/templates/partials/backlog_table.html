@@ -1,5 +1,5 @@
 <div class="table-wrap">
-<table id="backlog-rows">
+<table id="backlog-rows" class="responsive">
   <thead>
     <tr>
       <th></th><th>Item</th><th>Priority</th><th class="num">Needed</th><th class="num">On hand</th>
@@ -24,19 +24,19 @@
           <button type="submit" class="secondary" aria-label="Move {{ row.item.name }} down"{% if loop.last %} disabled{% endif %}>↓</button>
         </form>
       </td>
-      <td>
-        <a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a>
+      <td data-label="Item">
+        <span><a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a>
         <span class="badge">{{ row.item.kind.value }}</span>
-        {% if row.shared %}<span class="badge" title="Shared reusable item: counted once at the largest single demand">shared</span>{% endif %}
+        {% if row.shared %}<span class="badge" title="Shared reusable item: counted once at the largest single demand">shared</span>{% endif %}</span>
       </td>
-      <td><span class="badge p{{ row.priority }}">P{{ row.priority }}</span></td>
-      <td class="num">{{ row.needed }} {{ row.item.unit }}</td>
-      <td class="num">{{ row.on_hand }}</td>
-      <td class="num"><strong>{{ row.gross_shortfall }}</strong></td>
-      <td class="num">{{ row.on_order }}</td>
-      <td class="num">{{ row.unit_price }}</td>
-      <td class="num">{{ row.line_total }}</td>
-      <td>{% for pid in row.project_ids %}<a href="/projects/{{ pid }}">{{ project_names.get(pid, "?") }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      <td data-label="Priority"><span class="badge p{{ row.priority }}">P{{ row.priority }}</span></td>
+      <td class="num" data-label="Needed">{{ row.needed }} {{ row.item.unit }}</td>
+      <td class="num" data-label="On hand">{{ row.on_hand }}</td>
+      <td class="num" data-label="Shortfall"><strong>{{ row.gross_shortfall }}</strong></td>
+      <td class="num" data-label="On order">{{ row.on_order }}</td>
+      <td class="num" data-label="Unit price">{{ row.unit_price }}</td>
+      <td class="num" data-label="Line total">{{ row.line_total }}</td>
+      <td data-label="Projects"><span>{% for pid in row.project_ids %}<a href="/projects/{{ pid }}">{{ project_names.get(pid, "?") }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span></td>
     </tr>
     {% else %}
     <tr><td colspan="10" class="muted">Nothing to buy: every active requirement is covered by stock.</td></tr>
@@ -49,19 +49,19 @@
 <h2>Needs a price</h2>
 <p class="muted">Counted, never summed and never scheduled. Add an estimate on the item page.</p>
 <div class="table-wrap">
-<table id="unpriced-rows">
+<table id="unpriced-rows" class="responsive">
   <thead>
     <tr><th>Item</th><th>Priority</th><th class="num">Needed</th><th class="num">On hand</th><th class="num">Shortfall</th><th>Projects</th></tr>
   </thead>
   <tbody>
     {% for row in backlog.unpriced %}
     <tr id="unpriced-{{ row.item.id }}">
-      <td><a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a> <span class="badge">{{ row.item.kind.value }}</span></td>
-      <td><span class="badge p{{ row.priority }}">P{{ row.priority }}</span></td>
-      <td class="num">{{ row.needed }} {{ row.item.unit }}</td>
-      <td class="num">{{ row.on_hand }}</td>
-      <td class="num"><strong>{{ row.gross_shortfall }}</strong></td>
-      <td>{% for pid in row.project_ids %}<a href="/projects/{{ pid }}">{{ project_names.get(pid, "?") }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      <td data-label="Item"><span><a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a> <span class="badge">{{ row.item.kind.value }}</span></span></td>
+      <td data-label="Priority"><span class="badge p{{ row.priority }}">P{{ row.priority }}</span></td>
+      <td class="num" data-label="Needed">{{ row.needed }} {{ row.item.unit }}</td>
+      <td class="num" data-label="On hand">{{ row.on_hand }}</td>
+      <td class="num" data-label="Shortfall"><strong>{{ row.gross_shortfall }}</strong></td>
+      <td data-label="Projects"><span>{% for pid in row.project_ids %}<a href="/projects/{{ pid }}">{{ project_names.get(pid, "?") }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span></td>
     </tr>
     {% endfor %}
   </tbody>
