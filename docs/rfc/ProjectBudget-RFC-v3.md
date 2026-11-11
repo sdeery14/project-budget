@@ -148,7 +148,7 @@ The forecast is a pure function: `(BudgetPlan, backlog, purchases_since_as_of, t
 **Monthly loop, starting this month:**
 
 1. Opening balance for month 1 = earmarked funds − protected reserve − Σ totals of purchases since `balance_as_of`. Later months open with the previous closing.
-2. Add the monthly contribution, then apply this month's overrides (signed, labeled). Month 1 receives the full contribution regardless of today's day of month; a user who has already been paid this month sets the balance after payday.
+2. Add the monthly contribution, then apply this month's overrides (signed, labeled). Month 1 receives the full contribution regardless of today's day of month; a user whose balance already includes this month's contribution offsets it with a negative override for the current month (there is no payday setting; entering a post-payday balance alone would count the contribution twice). *(Wording corrected under #21; the rule is unchanged.)*
 3. While the head of the queue costs ≤ balance: buy it, subtract, record.
 4. Closing balance carries forward. Record opening, contribution, overrides, purchases and closing for the month; that record is the explanation shown in the UI.
 
