@@ -1,6 +1,6 @@
 # ADR-012: Per-project lists against one budget
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-11
 **Implements:** Owner Acceptance Testing findings #32, #34, #25, #26, #27 and #36 (milestone "Owner Acceptance Testing"); amends RFC v3 §2 and §4, ADR-004 and ADR-007
 

@@ -15,6 +15,6 @@ One file per decision, numbered in the order they were made. Each ADR has a Stat
 | [009](009-license-apache-2-no-cla.md) | License: Apache-2.0, no CLA | Accepted |
 | [010](010-distribution.md) | Distribution | Accepted |
 | [011](011-deferred-list-is-binding.md) | Deferred list is binding | Accepted |
-| [012](012-per-project-lists-one-budget.md) | Per-project lists against one budget | Proposed |
+| [012](012-per-project-lists-one-budget.md) | Per-project lists against one budget | Accepted |
 
 The first eleven were accepted on 2026-11-07 with [RFC v3](../rfc/ProjectBudget-RFC-v3.md), which holds the full specification each ADR points into. New ADRs start from [000-template.md](000-template.md).
