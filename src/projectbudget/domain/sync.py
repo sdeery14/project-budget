@@ -41,6 +41,7 @@ class ExistingRequirement:
     intent: Intent
     archive_reason: str | None
     item_name: str
+    sort_order: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +100,8 @@ class Create:
     estimate: Money | None
     likely_rename_of: str | None = None
     """An existing requirement with the same item name that is leaving the manifest."""
+    sort_order: int = 0
+    """The item's position in the file: the manifest's order is the purchase order (ADR-012)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +109,7 @@ class Update:
     requirement_id: str
     external_id: str
     changes: tuple[FieldChange, ...]
-    """Requirement fields: qty, priority."""
+    """Requirement fields: qty, priority, sort_order (the item's position in the file)."""
     item_changes: tuple[FieldChange, ...]
     """Catalog item fields the source owns here: name, kind, unit."""
     estimate: Money | None
@@ -213,7 +216,7 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
     # A later item in the same manifest that disagrees is a conflict, never a silent reuse.
     pending: dict[str, tuple[ItemKind, str, str]] = {}
 
-    for item in manifest.items:
+    for position, item in enumerate(manifest.items):
         existing = by_external.get(item.id)
         if existing is not None and existing.catalog_item_id in ctx.items_by_id:
             # An id we already know keeps its catalog mapping; its slug is immutable, so a
@@ -276,6 +279,7 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
                     catalog_exists=state is not None,
                     estimate=estimate,
                     likely_rename_of=rename.external_id if rename is not None else None,
+                    sort_order=position,
                 )
             )
             continue
@@ -285,6 +289,8 @@ def plan_sync(ctx: SyncContext) -> SyncPlan:
             changes.append(FieldChange("qty", existing.qty, item.qty))
         if existing.priority != item.priority:
             changes.append(FieldChange("priority", existing.priority, item.priority))
+        if existing.sort_order != position:
+            changes.append(FieldChange("sort_order", existing.sort_order, position))
         reactivate = (
             existing.intent is Intent.ARCHIVED and existing.archive_reason == REMOVED_FROM_SOURCE
         )

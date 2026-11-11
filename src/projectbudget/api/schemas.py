@@ -765,6 +765,7 @@ class PlanCreateOut(BaseModel):
     catalog_exists: bool
     estimate: MoneyOut | None
     likely_rename_of: str | None
+    sort_order: int
 
 
 class PlanUpdateOut(BaseModel):
@@ -823,6 +824,7 @@ class SyncPlanOut(BaseModel):
                     catalog_exists=c.catalog_exists,
                     estimate=MoneyOut.of(c.estimate) if c.estimate else None,
                     likely_rename_of=c.likely_rename_of,
+                    sort_order=c.sort_order,
                 )
                 for c in plan.creates
             ],

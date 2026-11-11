@@ -28,6 +28,7 @@ def line(
     intent: Intent = Intent.ACTIVE,
     consumed: int = 0,
     id_: str | None = None,
+    sort_order: int = 0,
 ) -> RequirementLine:
     return RequirementLine(
         id=id_ or f"{project}-{item}-{qty}-{sharing.value}",
@@ -38,6 +39,7 @@ def line(
         sharing=sharing,
         intent=intent,
         consumed=consumed,
+        sort_order=sort_order,
     )
 
 
@@ -192,6 +194,67 @@ def test_workspace_order_wins_and_new_rows_append_by_priority_then_name() -> Non
     assert ordered.order == ("c", "a", "d", "b")
     unordered = consolidate(items, lines, order=[], currency=USD)
     assert [row.item.id for row in unordered.rows] == ["d", "b", "a", "c"]
+
+
+def test_default_order_is_priority_then_project_then_requirement_order_then_name() -> None:
+    """ADR-012 (#34): a manifest's file order survives into the queue; projects do not interleave."""
+    items = [
+        item(id_, ItemKind.CONSUMABLE, price="1.00", name=name)
+        for id_, name in (
+            ("pi", "Raspberry Pi"),
+            ("cooler", "Active cooler"),
+            ("psu", "Power supply"),
+            ("pump", "Shock pump"),
+            ("sealant", "Tyre sealant"),
+            ("rope", "Rope"),
+        )
+    ]
+    lines = [
+        # Home system lists the Pi first, then what attaches to it; alphabetically it comes last.
+        line("pi", 1, project="home", priority=1, sort_order=0),
+        line("cooler", 1, project="home", priority=1, sort_order=1),
+        line("psu", 1, project="home", priority=1, sort_order=2),
+        # Garage: a P1 item listed after a P2 item still goes first.
+        line("sealant", 1, project="garage", priority=2, sort_order=0),
+        line("pump", 1, project="garage", priority=1, sort_order=1),
+        # A project outside the project order ranks after the known ones; names break ties.
+        line("rope", 1, project="shed", priority=1, sort_order=0),
+    ]
+    result = consolidate(items, lines, order=[], currency=USD, project_order=["garage", "home"])
+    assert [row.item.id for row in result.rows] == [
+        "pump",
+        "pi",
+        "cooler",
+        "psu",
+        "rope",
+        "sealant",
+    ]
+    # Without a project order every project ties, so requirement order and then name decide.
+    no_projects = consolidate(items, lines, order=[], currency=USD)
+    assert [row.item.id for row in no_projects.rows] == [
+        "pi",
+        "rope",
+        "cooler",
+        "pump",
+        "psu",
+        "sealant",
+    ]
+
+
+def test_a_row_with_lines_from_two_projects_ranks_by_its_most_urgent_line() -> None:
+    items = [
+        item("a", ItemKind.CONSUMABLE, price="1.00", name="A"),
+        item("b", ItemKind.CONSUMABLE, price="1.00", name="B"),
+    ]
+    lines = [
+        line("a", 1, project="late", priority=1, sort_order=5),
+        line("a", 1, project="early", priority=2, sort_order=0),
+        line("b", 1, project="early", priority=1, sort_order=0),
+    ]
+    result = consolidate(items, lines, order=[], currency=USD, project_order=["early", "late"])
+    # Both rows are P1; "b" is P1 in the earlier project, "a" is P1 only in the later one.
+    assert [row.item.id for row in result.rows] == ["b", "a"]
+    assert [row.priority for row in result.rows] == [1, 1]
 
 
 def test_shared_flag_marks_rows_with_a_shared_reusable_contribution() -> None:

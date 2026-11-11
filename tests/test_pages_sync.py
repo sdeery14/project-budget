@@ -11,6 +11,12 @@ items:
   - {id: screws, name: Deck screws, qty: 100, estimate: {amount: "9.50", currency: USD}}
   - {id: saw, name: Hand saw, qty: 1, kind: reusable}
 """
+SWAPPED = """version: 1
+project: {id: shed, name: Garden shed}
+items:
+  - {id: saw, name: Hand saw, qty: 1, kind: reusable}
+  - {id: screws, name: Deck screws, qty: 100, estimate: {amount: "9.50", currency: USD}}
+"""
 
 
 def _csrf(client: TestClient) -> str:
@@ -78,6 +84,17 @@ def test_sync_pages_end_to_end(logged_in: TestClient) -> None:
     )
     assert uploaded.status_code == 200
     assert "qty 100 → 120" in uploaded.text
+
+    # Items swapped in the file: the plan shows the move as 1-based positions (#34).
+    swapped = logged_in.post(
+        f"/sync/{source_id}/preview",
+        data={"csrf_token": csrf},
+        files={"file": ("shed.yaml", SWAPPED.encode(), "text/yaml")},
+    )
+    assert swapped.status_code == 200
+    assert "position 2 → 1" in swapped.text
+    assert "position 1 → 2" in swapped.text
+    assert "sort_order" not in swapped.text
     assert 'name="content_b64"' in uploaded.text
     content_b64 = uploaded.text.split('name="content_b64" value="')[1].split('"')[0]
     uploaded_hash = uploaded.text.split('name="expected_content_hash" value="')[1].split('"')[0]

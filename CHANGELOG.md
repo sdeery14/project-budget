@@ -8,6 +8,10 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 - Browser smoke tests (`tests/e2e`, Playwright, Chromium) that sign in, run the core journey, check destructive buttons ask first and fail on console errors, at desktop and phone width; CI runs them as "UI smoke (Playwright)".
 
+### Changed
+
+- Default backlog and timeline order within a priority tier is now by project (creation order) and then each project's own requirement order instead of alphabetical; a manifest sets that order to its file order on every apply, so the file's order is the purchase order (#34, ADR-012). The owner's explicit backlog order still wins.
+
 ### Fixed
 
 - Phone width: the navigation wraps, inline form fields fill the line one per row, and the backlog, timeline, requirements, catalog and purchases tables become labelled stacked rows below 640 px, so nothing scrolls sideways and the shortfall and price columns stay on screen (#15).

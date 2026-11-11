@@ -38,6 +38,7 @@ A CSV source has fixed columns `id,name,qty,unit,kind,priority,sharing,catalog,e
 | Same content as the last applied run | No-op, recorded |
 | New item id | A requirement; a new unreviewed catalog item unless `catalog` names an existing one (or the name's slug already exists) |
 | Existing id with changed qty or priority | The requirement is updated |
+| Items in a different order | The project's requirements take the file's order, and so does the backlog's default order |
 | Existing id with a changed name | The catalog item is renamed while the source owns it (see below); the id and slug never change |
 | Id missing from the file | The requirement is archived with reason `removed_from_source`; purchases and consumption stay |
 | Id back again | The same requirement is reactivated |
@@ -47,7 +48,9 @@ A CSV source has fixed columns `id,name,qty,unit,kind,priority,sharing,catalog,e
 | Two items in one file defining the same catalog item differently | The later one is rejected |
 | Estimate in another currency | Only the estimate is rejected; the item still applies |
 
-**Who owns which field.** The manifest owns `name`, `qty`, `priority`, the initial `sharing`, and the estimate (recorded with origin `manifest` and dated by the file's mtime or the commit date, so a newer manual price keeps winning). It owns `kind` and `unit` only for a catalog item it created that is still unreviewed and that nothing else references. You own the catalog mapping, intent (active, paused, cancelled, archived), the sharing override, notes and ordering; the manifest never changes them. Archiving something yourself keeps it archived even if the manifest still lists it.
+**Who owns which field.** The manifest owns `name`, `qty`, `priority`, the initial `sharing`, the estimate (recorded with origin `manifest` and dated by the file's mtime or the commit date, so a newer manual price keeps winning), and the order of the items within the project. It owns `kind` and `unit` only for a catalog item it created that is still unreviewed and that nothing else references. You own the catalog mapping, intent (active, paused, cancelled, archived), the sharing override, notes and the workspace backlog order; the manifest never changes them. Archiving something yourself keeps it archived even if the manifest still lists it.
+
+**Order matters.** List items in the order you intend to buy them. Within a priority tier the backlog and the timeline follow it (ADR-012), so a part comes after the thing it attaches to when the file says so. Moving a row on the Backlog page overrides the default order for the whole workspace until you move again.
 
 **Detach** removes the source and its run history; the project and its requirements stay and become manual.
 

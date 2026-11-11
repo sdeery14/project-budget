@@ -15,7 +15,9 @@ For each catalog item, over requirements with intent ``active``:
 
 On-order is shown beside gross shortfall and netted out only by the forecast.
 Row priority is the most urgent contributing requirement. Rows follow the
-workspace backlog order; items not yet in it append in priority order.
+workspace backlog order; items not yet in it append in the default order
+(ADR-012): priority, then project, then the contributing requirement's
+``sort_order`` (a manifest's file order), then item name.
 """
 
 from collections.abc import Iterable, Sequence
@@ -38,6 +40,8 @@ class RequirementLine:
     sharing: Sharing
     intent: Intent
     consumed: int = 0
+    sort_order: int = 0
+    """Position within its project: manifest order for synced rows, creation order by hand."""
 
     @property
     def active(self) -> bool:
@@ -149,20 +153,44 @@ def row_priority(lines: Sequence[RequirementLine]) -> int:
     return min(line.priority for line in lines if line.active)
 
 
+def default_rank(
+    lines: Sequence[RequirementLine], project_position: dict[str, int]
+) -> tuple[int, int, int]:
+    """Where a row falls by default: its best contributing line's (priority, project, order).
+
+    Projects not in ``project_position`` rank after those that are. The row's priority is
+    that of its most urgent line, so the first element equals ``row_priority``.
+    """
+    unknown = len(project_position)
+    return min(
+        (line.priority, project_position.get(line.project_id, unknown), line.sort_order)
+        for line in lines
+        if line.active
+    )
+
+
 def consolidate(
     items: Iterable[ItemFacts],
     lines: Iterable[RequirementLine],
     *,
     order: Sequence[str],
     currency: str,
+    project_order: Sequence[str] = (),
 ) -> Backlog:
-    """Build the backlog: one row per item with gross shortfall > 0, in workspace order."""
+    """Build the backlog: one row per item with gross shortfall > 0, in workspace order.
+
+    ``order`` is the owner's explicit backlog order (item ids); rows outside it follow the
+    default order, where ``project_order`` (project ids, Projects page order) breaks ties
+    between projects.
+    """
+    project_position = {project_id: index for index, project_id in enumerate(project_order)}
     by_item: dict[str, list[RequirementLine]] = {}
     for line in lines:
         if line.active:
             by_item.setdefault(line.catalog_item_id, []).append(line)
 
     rows: list[BacklogRow] = []
+    rank: dict[str, tuple[int, int, int]] = {}
     for item in items:
         contributing = by_item.get(item.id, [])
         if not contributing:
@@ -170,6 +198,7 @@ def consolidate(
         shortfall = gross_shortfall(item.kind, contributing, item.on_hand)
         if shortfall == 0:
             continue
+        rank[item.id] = default_rank(contributing, project_position)
         rows.append(
             BacklogRow(
                 item=item,
@@ -187,7 +216,7 @@ def consolidate(
     rows.sort(
         key=lambda row: (
             position.get(row.item.id, len(position)),
-            row.priority,
+            rank[row.item.id],
             row.item.name.lower(),
             row.item.id,
         )

@@ -14,7 +14,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, exists, func, select, update
+from sqlalchemy import CursorResult, exists, select, update
 from sqlalchemy.orm import Session
 
 from projectbudget.adapters import manifest as manifest_adapter
@@ -405,6 +405,7 @@ def _context(
             intent=Intent(req.intent),
             archive_reason=req.archive_reason,
             item_name=name,
+            sort_order=req.sort_order,
         )
         for req, name in existing_rows
     )
@@ -574,13 +575,6 @@ def preview(
 # --- apply -----------------------------------------------------------------------------------
 
 
-def _next_sort_order(db: Session, project_id: str) -> int:
-    current = db.scalar(
-        select(func.max(Requirement.sort_order)).where(Requirement.project_id == project_id)
-    )
-    return 0 if current is None else current + 1
-
-
 def _apply(
     db: Session,
     source: SyncSource,
@@ -645,7 +639,7 @@ def _apply(
                 catalog_item_id=row.id,
                 qty=create.item.qty,
                 priority=create.item.priority,
-                sort_order=_next_sort_order(db, project.id),
+                sort_order=create.sort_order,
                 intent=Intent.ACTIVE.value,
                 archive_reason=None,
                 sharing=create.item.sharing.value,

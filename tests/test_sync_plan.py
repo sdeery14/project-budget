@@ -52,6 +52,7 @@ def existing(
     intent: Intent = Intent.ACTIVE,
     archive_reason: str | None = None,
     item_id: str = "item",
+    sort_order: int = 0,
 ) -> ExistingRequirement:
     return ExistingRequirement(
         id=f"req-{external_id}",
@@ -63,6 +64,7 @@ def existing(
         intent=intent,
         archive_reason=archive_reason,
         item_name=name,
+        sort_order=sort_order,
     )
 
 
@@ -314,6 +316,31 @@ def test_a_name_that_yields_no_slug_is_rejected() -> None:
     assert "slug" in plan.rejects[0].reason
 
 
+def test_the_file_order_is_the_requirement_order() -> None:
+    """ADR-012 (#34): creates carry their position; a moved existing item gets a sort_order change."""
+    plan = plan_sync(
+        ctx(
+            item("b", "Bee"),
+            item("a", "Ay"),
+            item("c", "Sea"),
+            existing_reqs=(
+                existing("a", "Ay", sort_order=0, item_id="item-ay"),
+                existing("b", "Bee", sort_order=1, item_id="item-bee"),
+            ),
+            catalog={"ay": state("ay", "Ay"), "bee": state("bee", "Bee")},
+        )
+    )
+    assert [
+        (u.external_id, [(c.field, c.old, c.new) for c in u.changes]) for u in plan.updates
+    ] == [
+        ("b", [("sort_order", 1, 0)]),
+        ("a", [("sort_order", 0, 1)]),
+    ]
+    (create,) = plan.creates
+    assert (create.external_id, create.sort_order) == ("c", 2)
+    assert plan.unchanged == ()
+
+
 def test_counts_summarise_the_plan() -> None:
     plan = plan_sync(
         ctx(
@@ -321,10 +348,14 @@ def test_counts_summarise_the_plan() -> None:
             item("same", "Same"),
             item("back", "Back"),
             existing_reqs=(
-                existing("same", "Same"),
+                existing("same", "Same", sort_order=1),
                 existing("gone", "Gone"),
                 existing(
-                    "back", "Back", intent=Intent.ARCHIVED, archive_reason="removed_from_source"
+                    "back",
+                    "Back",
+                    intent=Intent.ARCHIVED,
+                    archive_reason="removed_from_source",
+                    sort_order=2,
                 ),
             ),
             catalog={"same": state("same", "Same"), "back": state("back", "Back")},

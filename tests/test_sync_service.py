@@ -19,7 +19,15 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import catalog, inventory, projects, purchases, requirements, sync
+from projectbudget.services import (
+    backlog,
+    catalog,
+    inventory,
+    projects,
+    purchases,
+    requirements,
+    sync,
+)
 from projectbudget.services.guards import ReadOnlyPrincipalError
 from projectbudget.services.sync import SourceInfo
 
@@ -133,6 +141,7 @@ def test_create_source_validates_per_kind(
         principal,
         sync.SourceCreate(SourceKind.GITHUB, " o/r ", branch="main", token_env="GITHUB_TOKEN"),
         import_dir=import_dir,
+        now=NOW,
     )
     assert (github.locator, github.branch, github.path, github.token_env) == (
         "o/r",
@@ -146,6 +155,7 @@ def test_create_source_validates_per_kind(
         principal,
         sync.SourceCreate(SourceKind.CSV, "heater/items.csv", external_project_id="garden-gate"),
         import_dir=import_dir,
+        now=LATER,  # sources list in creation order; equal timestamps have no order
     )
     assert csv.external_project_id == "garden-gate"
     assert [s.id for s in sync.list_sources(session_factory, principal)] == [github.id, csv.id]
@@ -172,6 +182,7 @@ def test_first_apply_creates_project_items_requirements_and_estimates(
     assert project.name == "Diesel heater install"
     reqs = requirements.list_requirements(session_factory, principal, project.id)
     assert [(r.qty, r.priority) for r in reqs] == [(3, 2), (6, 1)]
+    assert [r.sort_order for r in reqs] == [0, 1]  # the file's order (#34)
     fuel = catalog.get_item_by_slug(session_factory, principal, "6-mm-fuel-line")
     assert fuel is not None
     assert (fuel.unit, fuel.kind, fuel.review_state) == (
@@ -260,6 +271,55 @@ def test_changed_manifest_updates_archives_creates_and_records_a_new_estimate(
     assert third.plan.counts["archives"] == 1  # the exhaust pipe is gone again
     back = requirements.get_requirement(session_factory, principal, reqs[clamp.id].id)
     assert (back.intent, back.archive_reason) == (Intent.ACTIVE, None)
+
+
+def test_reordering_the_file_reorders_the_requirements_and_the_backlog(
+    session_factory: SessionFactory, principal: Principal, source: SourceInfo, import_dir: Path
+) -> None:
+    """ADR-012 (#34): the manifest's order is the purchase order, re-set on every apply."""
+    fuel_line = [
+        "  - id: fuel-line",
+        "    name: 6 mm fuel line",
+        "    qty: 3",
+        "    unit: m",
+        '    estimate: { amount: "12.50", currency: USD }',
+    ]
+    clamps = [
+        "  - id: clamps",
+        "    name: Hose clamp",
+        "    qty: 6",
+        "    kind: reusable",
+        '    estimate: { amount: "1.00", currency: USD }',
+    ]
+    head = [
+        "version: 1",
+        "project:",
+        "  id: diesel-heater",
+        "  name: Diesel heater install",
+        "items:",
+    ]
+    fuel_first = "\n".join([*head, *fuel_line, *clamps, ""])
+    clamps_first = "\n".join([*head, *clamps, *fuel_line, ""])
+
+    first = sync.apply(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=fetched(fuel_first)
+    )
+    project_id = first.source.project_id or ""
+    names_before = [row.item.name for row in backlog.get_backlog(session_factory, principal).rows]
+    assert names_before == ["6 mm fuel line", "Hose clamp"]  # both P2: the file's order decides
+
+    result = sync.apply(
+        session_factory, principal, source.id, import_dir=import_dir, fetched=fetched(clamps_first)
+    )
+    assert result.plan is not None
+    assert [(u.external_id, [c.field for c in u.changes]) for u in result.plan.updates] == [
+        ("clamps", ["sort_order"]),
+        ("fuel-line", ["sort_order"]),
+    ]
+    reqs = requirements.list_requirements(session_factory, principal, project_id)
+    assert [(r.qty, r.sort_order) for r in reqs] == [(6, 0), (3, 1)]
+    names_after = [row.item.name for row in backlog.get_backlog(session_factory, principal).rows]
+    assert names_after == ["Hose clamp", "6 mm fuel line"]
 
 
 def test_schema_error_rejects_the_file_and_records_a_rejected_run(
