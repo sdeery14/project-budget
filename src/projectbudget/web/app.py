@@ -17,6 +17,7 @@ from projectbudget.persistence.session import make_session_factory
 from projectbudget.settings import Settings
 from projectbudget.web.errors import register_error_handlers
 from projectbudget.web.health import router as health_router
+from projectbudget.web.pages.account import router as account_router
 from projectbudget.web.pages.backlog import router as backlog_router
 from projectbudget.web.pages.budget import router as budget_router
 from projectbudget.web.pages.catalog import router as catalog_router
@@ -71,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(data_router)
     app.include_router(sync_router)
     app.include_router(tokens_router)
+    app.include_router(account_router)
     app.include_router(api_router)
     register_error_handlers(app)
     return app

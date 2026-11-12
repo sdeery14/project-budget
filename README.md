@@ -39,6 +39,7 @@ There are no default credentials: the app serves only `/health` until `init` has
 | Command | Does |
 | --- | --- |
 | `projectbudget init --username NAME [--currency USD]` | apply migrations, create the owner, fix the currency |
+| `projectbudget passwd --username NAME` | set a new password without the old one (forgotten password); signs every session out |
 | `projectbudget run [--host] [--port] [--demo]` | start the single-worker server |
 | `projectbudget export [--output PATH]` / `import PATH [--replace]` | the JSON workspace document |
 | `projectbudget backup [--output PATH]` | consistent SQLite copy (`VACUUM INTO`) |

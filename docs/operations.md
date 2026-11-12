@@ -13,6 +13,8 @@ How to install, run, back up, restore and upgrade ProjectBudget. Everything here
 
 `init` applies migrations, creates the single owner and fixes the workspace currency (`--currency EUR`; USD by default). There are no default credentials: until `init` has run the app serves only `/health`.
 
+**Passwords.** A signed-in owner changes the password on the Account page (`/settings/account`); every other session is signed out. A forgotten password is reset on the host with `projectbudget passwd --username NAME` (`docker exec -it projectbudget projectbudget passwd --username NAME` in Docker), which needs no old password and signs every session out. `--password-stdin` reads the new password from standard input for scripts. API tokens can never change the password.
+
 To try it without touching your data: `uvx projectbudget run --demo` creates a throwaway SQLite workspace in a temporary folder, seeds fictional data and prints the demo login.
 
 ## Configuration

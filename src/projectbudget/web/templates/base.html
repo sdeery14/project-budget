@@ -25,6 +25,7 @@
       <a href="/sync">Sync</a>
       <a href="/settings/data">Data</a>
       <a href="/settings/tokens">API tokens</a>
+      <a href="/settings/account">Account</a>
       <form method="post" action="/logout" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="link">Log out ({{ principal.username }})</button>

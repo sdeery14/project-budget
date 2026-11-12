@@ -11,8 +11,9 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any, cast
 
-from sqlalchemy import DateTime, case, delete, literal, select, update
+from sqlalchemy import CursorResult, DateTime, case, delete, literal, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -89,6 +90,14 @@ def normalize_username(username: str) -> str:
 # --- owner -------------------------------------------------------------------------
 
 
+class WrongPasswordError(Exception):
+    """The current password did not match; nothing changed."""
+
+
+class PasswordChangeRequiresSessionError(PermissionError):
+    """Passwords change from a browser session or the host's CLI, never with an API token."""
+
+
 class NoOwnerError(Exception):
     """``projectbudget init`` has not been run."""
 
@@ -128,6 +137,81 @@ def create_owner(
         )
         db.add(owner)
         return OwnerInfo(id=owner.id, username=owner.username)
+
+
+def change_password(
+    session_factory: SessionFactory,
+    principal: Principal,
+    current_password: str,
+    new_password: str,
+    *,
+    keep_session_id: str | None = None,
+) -> None:
+    """Replace the owner's password after checking the current one (#12).
+
+    Every other session is revoked so a stolen cookie dies with the old password;
+    ``keep_session_id`` is the session doing the changing. Tokens may not do this.
+    """
+    if principal.auth != "session":
+        raise PasswordChangeRequiresSessionError
+    passwords.validate_password(new_password)
+    new_hash = passwords.hash_password(new_password)
+    with session_factory.begin() as db:
+        # Lock first, then read and verify: a reset that lands while this request is
+        # verifying must not be overwritten by it (both writers take the same lock).
+        owner = _lock_owner(db, principal.owner_id)
+        if owner is None or not passwords.verify_password(owner.password_hash, current_password):
+            raise WrongPasswordError
+        owner.password_hash = new_hash
+        _revoke_sessions_of(db, owner.id, keep=keep_session_id)
+
+
+def set_password(session_factory: SessionFactory, username: str, new_password: str) -> OwnerInfo:
+    """Set a password without the current one: the host's recovery path (#12).
+
+    Only the CLI calls this. Every session is revoked.
+    """
+    name = normalize_username(username)
+    passwords.validate_password(new_password)
+    new_hash = passwords.hash_password(new_password)
+    with session_factory.begin() as db:
+        owner_id = db.scalar(select(Owner.id).where(Owner.username == name))
+        owner = _lock_owner(db, owner_id) if owner_id is not None else None
+        if owner is None:
+            raise NoOwnerError(f"No owner named {name!r}")
+        owner.password_hash = new_hash
+        _revoke_sessions_of(db, owner.id, keep=None)
+        return OwnerInfo(id=owner.id, username=owner.username)
+
+
+def _lock_owner(db: Session, owner_id: str) -> Owner | None:
+    """Take a write lock on the owner row for the rest of the transaction, then load it fresh.
+
+    Same device as ``catalog.lock_item``: a no-op UPDATE holds the row lock on PostgreSQL
+    and the database write lock on SQLite, so the hash read after it is the committed one.
+    """
+    result = cast(
+        CursorResult[Any],
+        db.execute(
+            update(Owner)
+            .where(Owner.id == owner_id)
+            .values(created_at=Owner.created_at)
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    if result.rowcount == 0:
+        return None
+    owner = db.get(Owner, owner_id)
+    if owner is not None:
+        db.refresh(owner)
+    return owner
+
+
+def _revoke_sessions_of(db: Session, owner_id: str, *, keep: str | None) -> None:
+    statement = delete(LoginSession).where(LoginSession.owner_id == owner_id)
+    if keep is not None:
+        statement = statement.where(LoginSession.id != keep)
+    db.execute(statement)
 
 
 def authenticate(
