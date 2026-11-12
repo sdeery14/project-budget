@@ -70,6 +70,43 @@ def version() -> None:
 
 
 @app.command()
+def passwd(
+    ctx: typer.Context,
+    username: Annotated[str, typer.Option(prompt=True, help="The owner whose password to set.")],
+    password_stdin: Annotated[
+        bool,
+        typer.Option(
+            "--password-stdin",
+            help="Read the new password from standard input instead of prompting (for scripts).",
+        ),
+    ] = False,
+) -> None:
+    """Set the owner's password without the old one, for a forgotten password; signs every session out."""
+    settings = _settings(ctx)
+    engine = make_engine(settings.effective_database_url)
+    try:
+        factory = make_session_factory(engine)
+        if password_stdin:
+            password = sys.stdin.readline().rstrip("\r\n")
+        else:
+            password = typer.prompt(
+                f"New password (at least {passwords.MIN_PASSWORD_LENGTH} characters)",
+                hide_input=True,
+                confirmation_prompt=True,
+            )
+        try:
+            owner = auth.set_password(factory, username, password)
+        except auth.NoOwnerError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+        except (auth.InvalidUsernameError, passwords.WeakPasswordError) as exc:
+            raise typer.BadParameter(str(exc)) from exc
+    finally:
+        engine.dispose()
+    typer.echo(f"Password set for {owner.username!r}; every session has been signed out.")
+
+
+@app.command()
 def init(
     ctx: typer.Context,
     username: Annotated[

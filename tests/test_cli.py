@@ -117,6 +117,46 @@ def test_init_prompts_and_confirms_the_password(migrated_url: str) -> None:
     assert _owner_exists(migrated_url)
 
 
+def test_passwd_resets_a_forgotten_password(migrated_url: str) -> None:
+    base = ["--database-url", migrated_url]
+    runner.invoke(
+        app, [*base, "init", "--username", "sean", "--password-stdin"], input=OWNER_PASSWORD + "\n"
+    )
+    missing = runner.invoke(
+        app,
+        [*base, "passwd", "--username", "nobody", "--password-stdin"],
+        input="whatever it was\n",
+    )
+    assert missing.exit_code == 1
+    assert "No owner named 'nobody'" in missing.output
+    weak = runner.invoke(
+        app, [*base, "passwd", "--username", "sean", "--password-stdin"], input="short\n"
+    )
+    assert weak.exit_code == 2
+    result = runner.invoke(
+        app,
+        [*base, "passwd", "--username", "Sean", "--password-stdin"],
+        input="a brand new password\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "Password set for 'sean'" in result.output
+    assert "a brand new password" not in result.output
+    engine = make_engine(migrated_url)
+    try:
+        factory = make_session_factory(engine)
+        assert auth.authenticate(factory, "sean", OWNER_PASSWORD, limit_keys=["x"]) is None
+        assert auth.authenticate(factory, "sean", "a brand new password", limit_keys=["x"])
+    finally:
+        engine.dispose()
+    prompted = runner.invoke(
+        app,
+        [*base, "passwd", "--username", "sean"],
+        input="another new password\nanother new password\n",
+    )
+    assert prompted.exit_code == 0, prompted.output
+    assert "another new password" not in prompted.output
+
+
 def test_init_sets_the_workspace_currency(migrated_url: str) -> None:
     result = runner.invoke(
         app,
