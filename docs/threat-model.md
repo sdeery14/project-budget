@@ -1,6 +1,6 @@
 # Threat model (V1 draft)
 
-**Status:** draft written for Milestone 5 (RFC v3 §7). It is deliberately two pages: what the single-owner V1 protects, who it protects against, and what it does not try to do. It is expanded before any hosted or multi-user offering.
+**Status:** draft written for Milestone 5 (RFC v3 §7), reviewed for the 0.1.0 release after owner acceptance testing. It is deliberately two pages: what the single-owner V1 protects, who it protects against, and what it does not try to do. It is expanded before any hosted or multi-user offering.
 
 ## What is being protected
 
@@ -18,13 +18,13 @@ One owner's private budget data: projects, requirements, prices, stock, purchase
 
 ## Threats and what V1 does about them
 
-**Credential leakage.** Passwords are hashed with Argon2id; the session cookie holds a random secret and the database stores only its SHA-256; API tokens are shown once and stored hashed. A leaked token cannot mint tokens (token management needs a browser session) and can be revoked from the UI. Login is rate-limited per username and per address with database-backed buckets and constant-time comparison; unknown usernames cost the same work as known ones. Residual risk: a token pasted into a script on a shared machine; mitigation is read-only tokens and revocation.
+**Credential leakage.** Passwords are hashed with Argon2id; the session cookie holds a random secret and the database stores only its SHA-256; API tokens are shown once and stored hashed. A leaked token cannot mint tokens (token management needs a browser session) and can be revoked from the UI. Login is rate-limited per username and per address with database-backed buckets and constant-time comparison; unknown usernames cost the same work as known ones. A password change from the Account page signs every other browser session out, and `projectbudget passwd` on the host does the same without the old password. API tokens survive a password change, so a compromised account should also revoke its tokens. Residual risk: a token pasted into a script on a shared machine; mitigation is read-only tokens and revocation.
 
 **Session theft and cross-site requests.** Cookies are HttpOnly, SameSite=Lax and Secure by default; every state-changing request needs a same-origin `Origin` or `Referer` header and, for cookie sessions, the per-session CSRF token. Sessions have an idle timeout and a 30-day maximum and are rotated at login. Residual risk: an operator who turns Secure cookies off on an untrusted network.
 
 **Cross-user exposure.** Not applicable in V1: there is exactly one owner, and every route except `/health`, `/login` and static assets requires that owner (a test walks the route table). The `Principal` passed to every service function is the chokepoint where workspace isolation will be enforced before multi-user exists (ADR-005).
 
-**Malicious manifest.** YAML is loaded with the safe loader only; manifests are capped at 2 MB; the schema rejects unknown fields, floats where money belongs and duplicate ids; names never identify anything, so a crafted name cannot hijack another item. A manifest can only ever create or edit requirements, unreviewed catalog items it created and manifest-origin estimates; it cannot touch purchases, stock or the budget, and a disappearing item archives rather than deletes. Kind and unit changes on items the source does not own are rejected per item. Residual risk: a manifest that floods the catalog with junk items; mitigation is the dry-run plan shown before apply and detach, which keeps everything and drops the source.
+**Malicious manifest.** YAML is loaded with the safe loader only; manifests are capped at 2 MB; the schema rejects unknown fields, floats where money belongs and duplicate ids; names never identify anything, so a crafted name cannot hijack another item. A manifest can only ever create or edit requirements, unreviewed catalog items it created and manifest-origin estimates; once the owner has confirmed an item (by editing, counting or buying it) a manifest can no longer change its kind or unit; it cannot touch purchases, stock or the budget, and a disappearing item archives rather than deletes. Kind and unit changes on items the source does not own are rejected per item. Residual risk: a manifest that floods the catalog with junk items; mitigation is the dry-run plan shown before apply and detach, which keeps everything and drops the source.
 
 **Server-side request forgery through sync.** There is no URL input. File and CSV sources resolve under the configured import directory and refuse absolute paths, drive letters and `..`. GitHub sources are `owner/repo` plus branch and path; the client speaks HTTPS to `api.github.com` through an opener with no file, FTP, data or redirect handlers. Tokens for private repositories are read at fetch time from `PROJECTBUDGET_GITHUB_TOKEN` or a per-source named environment variable, and never stored.
 
@@ -36,7 +36,7 @@ One owner's private budget data: projects, requirements, prices, stock, purchase
 
 **Backup loss and data loss.** `projectbudget backup` writes a consistent SQLite copy with `VACUUM INTO` (a plain file copy under WAL is unsafe); `projectbudget export` writes the whole workspace as one JSON document that imports again id for id; PostgreSQL users take `pg_dump`. The release checklist includes a restore drill. Residual risk: backups stored on the same disk; the operations guide says to copy them elsewhere.
 
-**Local host compromise.** The SQLite file and its directory are created with owner-only permissions; the container runs as a non-root user with one volume. Anyone with read access to the host's data directory has the data; that is outside what the application can defend.
+**Local host compromise.** The SQLite file and its directory are created with owner-only permissions; the container runs as a non-root user with one volume. Anyone with read access to the host's data directory has the data, and anyone who can run the CLI there can reset the password (`projectbudget passwd`) or empty the workspace (`projectbudget reset`) without it; that is outside what the application can defend.
 
 **Denial of service.** Request bodies for manifests and imports are capped (2 MB and 50 MB); the login rate limit bounds password guessing; one worker serves one owner. The app is not designed to withstand a volumetric attack; put it behind a reverse proxy if that matters.
 
