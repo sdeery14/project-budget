@@ -170,7 +170,8 @@ def test_an_open_order_moves_money_from_still_to_buy_to_committed(
     page.get_by_label("Qty").fill("1")
     page.get_by_label("Unit price (USD)").fill("12.00")
     page.get_by_role("button", name="Record purchase").click()
-    expect(page.get_by_role("heading", level=1)).to_contain_text("Purchase")
+    # The page is headed by what was bought, not by the word "Purchase" (#23).
+    expect(page.get_by_role("heading", level=1)).to_contain_text("Bar clamp")
 
     page.goto(f"{live_server.url}/backlog")
     expect(page.locator("#backlog-total")).to_have_text("25.00 USD")  # 3 short, 1 on order

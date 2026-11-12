@@ -30,6 +30,13 @@ Every setting is an environment variable with the `PROJECTBUDGET_` prefix, or a 
 | `PROJECTBUDGET_SECURE_COOKIES` | `true` | keep on; browsers treat `localhost` as secure |
 | `PROJECTBUDGET_SYNC_IMPORT_DIR` | `<data dir>/imports` | the only directory file and CSV sync sources may read |
 | `PROJECTBUDGET_GITHUB_TOKEN` | unset | one read-only token for private GitHub sync sources; see "GitHub tokens" |
+| `PROJECTBUDGET_TIMEZONE` | the server's zone (UTC in the container) | IANA name such as `Europe/Amsterdam`; see "Dates and times" |
+
+## Dates and times
+
+Dates you type (a purchase date, an estimate's as-of date, a stock movement) are stored as written. Dates the app derives from an instant are first converted to the workspace time zone and then stored as a plain date: today's date as a form default or for a one-click "Mark purchased", a file's modification time and a commit time for a manifest's estimates. Timestamps on pages (sync runs, token use) are shown in the same zone, and the column says which zone that is. Without this, a sync at 19:04 in New York dated its estimates tomorrow (#27).
+
+The zone is `PROJECTBUDGET_TIMEZONE`, an IANA name. Unset, the server's own zone is used: that is right for `uvx` on your own machine and wrong inside the container, which runs in UTC, so set it in `compose.yaml` or with `docker run -e`. A name that is not a zone stops the app at startup with a message saying so. On Windows the server's own zone is read as a fixed offset for the current date (labelled with the Windows name, such as "Eastern Standard Time"), so set the variable there too if you want daylight-saving changes handled.
 
 ## Behind a reverse proxy
 

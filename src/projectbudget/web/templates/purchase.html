@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Purchase {{ purchase.ordered_on.isoformat() }} · ProjectBudget{% endblock %}
+{% block title %}{{ summary }}, {{ purchase.ordered_on.isoformat() }} · ProjectBudget{% endblock %}
 {% block content %}
 {% set p = purchase %}
 <section class="card">
-  <h1>Purchase on {{ p.ordered_on.isoformat() }}{% if p.vendor %} from {{ p.vendor }}{% endif %}
-    <span class="badge">{{ p.status.value }}</span></h1>
+  <h1>{{ summary }} <span class="badge">{{ p.status.value }}</span></h1>
+  <p class="muted" id="purchase-when">Purchase on {{ p.ordered_on.isoformat() }}{% if p.vendor %} from {{ p.vendor }}{% endif %}.</p>
   <p class="muted"><a href="/purchases">All purchases</a> · <a href="/backlog">Backlog</a> · <a href="/timeline">Timeline</a></p>
   {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
 
@@ -65,7 +65,7 @@
           <form method="post" action="/purchases/{{ p.id }}/lines/{{ line.id }}/receive" class="actions">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input name="qty" type="number" min="1" max="{{ line.remaining }}" value="{{ line.remaining }}" aria-label="Quantity received">
-            <input name="occurred_on" type="date" aria-label="Received on">
+            <input name="occurred_on" type="date" aria-label="Received on" value="{{ today.isoformat() }}">
             <button type="submit" class="secondary">Receive</button>
           </form>
           {% else %}<span class="muted">—</span>{% endif %}

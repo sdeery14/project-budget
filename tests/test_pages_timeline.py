@@ -10,6 +10,7 @@ from conftest import csrf_token_from
 from projectbudget.domain.principal import Principal
 from projectbudget.fixtures.canonical import CanonicalWorkspace, seed_canonical
 from projectbudget.persistence.session import SessionFactory
+from projectbudget.services import clock
 from projectbudget.web.templates import STATIC_DIR
 
 AS_OF = date(2026, 11, 1)
@@ -37,6 +38,9 @@ def test_budget_page_creates_a_plan_and_overrides(logged_in: TestClient) -> None
     csrf = _csrf(logged_in)
     empty = logged_in.get("/budget").text
     assert "No plan yet" in empty
+    # Without a plan the balance date starts at today (#23); with one it shows the plan's date.
+    balance_input = empty.split('id="balance_as_of"')[1].split(">")[0]
+    assert f'value="{clock.today().isoformat()}"' in balance_input
     saved = logged_in.post(
         "/budget",
         data={

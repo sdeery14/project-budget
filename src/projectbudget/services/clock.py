@@ -2,6 +2,8 @@
 
 from datetime import UTC, date, datetime
 
+from projectbudget import localtime
+
 
 def utcnow() -> datetime:
     """Naive UTC: what the dialect-neutral ``DateTime`` columns store (ADR-001)."""
@@ -9,5 +11,5 @@ def utcnow() -> datetime:
 
 
 def today() -> date:
-    """Today in UTC; dates such as an estimate's ``as_of`` carry no time zone."""
-    return utcnow().date()
+    """Today in the workspace time zone (#27): the date a default or a one-click purchase gets."""
+    return localtime.today()
