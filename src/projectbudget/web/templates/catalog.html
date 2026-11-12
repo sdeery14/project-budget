@@ -18,23 +18,37 @@
     <button type="submit">Create item</button>
   </form>
 
+  <p class="muted" id="review-help">Items typed on a project or brought in by a manifest start <strong>unreviewed</strong>.
+  Confirming one says you have looked at it: a manifest can then no longer change its kind or unit. Editing an item,
+  counting its stock or buying it confirms it too.
+  <span id="review-filter">Showing
+    {%- if review == "unreviewed" %} <strong>unreviewed</strong> · <a href="/catalog">all items</a>
+    {%- else %} <strong>all items</strong> · <a href="/catalog?review=unreviewed">unreviewed ({{ unreviewed_count }})</a>{% endif %}.</span></p>
+
   <div class="table-wrap">
   <table id="catalog-items" class="responsive">
     <thead><tr><th>Item</th><th>Slug</th><th>Kind</th><th>Unit</th><th>Review</th><th class="num">On hand</th><th class="num">Unit price</th><th>As of</th></tr></thead>
     <tbody>
       {% for row in rows %}
-      <tr>
+      <tr id="item-{{ row.item.id }}">
         <td data-label="Item"><a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a></td>
         <td data-label="Slug"><code>{{ row.item.slug }}</code></td>
         <td data-label="Kind">{{ row.item.kind.value }}</td>
         <td data-label="Unit">{{ row.item.unit }}</td>
-        <td data-label="Review">{{ row.item.review_state.value }}</td>
+        <td data-label="Review"><span class="actions">{{ row.item.review_state.value }}
+          {%- if row.item.review_state.value == "unreviewed" %}
+          <form method="post" action="/catalog/{{ row.item.id }}/confirm" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="review" value="{{ review }}">
+            <button type="submit" class="secondary small" aria-label="Confirm {{ row.item.name }}">Confirm</button>
+          </form>
+          {%- endif %}</span></td>
         <td class="num" data-label="On hand">{{ row.on_hand }}</td>
         <td class="num" data-label="Unit price">{% if row.estimate %}{{ row.estimate.price }}{% else %}<span class="muted">no price</span>{% endif %}</td>
         <td data-label="As of">{% if row.estimate %}{{ row.estimate.as_of.isoformat() }}{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted">No items yet. They also appear here when you type a new one on a project.</td></tr>
+      <tr><td colspan="8" class="muted">{% if review == "unreviewed" %}Nothing to review: every item is confirmed.{% else %}No items yet. They also appear here when you type a new one on a project.{% endif %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

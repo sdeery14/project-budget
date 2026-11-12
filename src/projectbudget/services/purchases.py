@@ -21,7 +21,7 @@ from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import Purchase, PurchaseLine
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services import workspace
-from projectbudget.services.catalog import load_live_item, lock_item
+from projectbudget.services.catalog import confirm, load_live_item, lock_item
 from projectbudget.services.clock import today, utcnow
 from projectbudget.services.guards import NotFoundError, require_write
 from projectbudget.services.inventory import record_receipt
@@ -281,7 +281,7 @@ def record_purchase(
             for line in command.lines
         }
         for item_id in sorted(set(item_ids.values())):
-            lock_item(db, item_id)
+            confirm(db, lock_item(db, item_id), moment)  # buying it is reviewing it (#36)
         purchase = Purchase(
             id=str(uuid.uuid4()),
             vendor=vendor,
@@ -382,6 +382,7 @@ def add_line(
         _require_open(purchase, "add a line to")
         _check_amounts(purchase.currency, command.unit_price)
         item = load_live_item(db, command.catalog_item_id)
+        confirm(db, item, now or utcnow())
         lines = _lines_of(db, purchase_id)
         db.add(
             PurchaseLine(

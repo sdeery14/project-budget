@@ -43,6 +43,7 @@ There are no default credentials: the app serves only `/health` until `init` has
 | `projectbudget run [--host] [--port] [--demo]` | start the single-worker server |
 | `projectbudget export [--output PATH]` / `import PATH [--replace]` | the JSON workspace document |
 | `projectbudget backup [--output PATH]` | consistent SQLite copy (`VACUUM INTO`) |
+| `projectbudget reset [--yes]` | empty the workspace, keeping the owner, sessions, tokens and currency |
 | `projectbudget sync SOURCE_ID [--dry-run] [--force]` | pull a manifest and apply its plan |
 | `projectbudget db upgrade\|downgrade\|current` | migrations |
 

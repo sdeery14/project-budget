@@ -49,6 +49,8 @@ def test_project_requirement_estimate_round_trip(logged_in: TestClient) -> None:
     assert req["source_id"] is None  # entered by hand, not managed by a manifest
     bolt = logged_in.get(f"/api/v1/catalog/items/{req['catalog_item_id']}").json()
     assert bolt["review_state"] == "unreviewed"
+    unreviewed = logged_in.get("/api/v1/catalog/items?review_state=unreviewed").json()
+    assert [i["id"] for i in unreviewed] == [bolt["id"]]  # the filter twin of the page (#36)
     listed = logged_in.get(f"/api/v1/projects/{project['id']}/requirements").json()
     assert [r["id"] for r in listed] == [req["id"]]
 

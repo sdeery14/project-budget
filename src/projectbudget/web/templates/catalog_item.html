@@ -2,7 +2,8 @@
 {% block title %}{{ item.name }} · ProjectBudget{% endblock %}
 {% block content %}
 <section class="card">
-  <h1>{{ item.name }} <span class="badge">{{ item.kind.value }}</span> <span class="badge">{{ item.review_state.value }}</span></h1>
+  <h1>{{ item.name }} <span class="badge">{{ item.kind.value }}</span>
+    <span class="badge" title="{% if item.review_state.value == 'confirmed' %}Confirmed: you have looked at this item, so a manifest can no longer change its kind or unit{% else %}Unreviewed: a manifest that created this item may still change its kind or unit{% endif %}">{{ item.review_state.value }}</span></h1>
   <p class="muted">Slug <code>{{ item.slug }}</code> · unit {{ item.unit }} · <a href="/catalog">All items</a> · <a href="/backlog">Backlog</a></p>
   {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
   {% if item.merged %}
@@ -23,11 +24,17 @@
     <div><label for="kind">Kind</label>
       <select id="kind" name="kind">{% for k in kinds %}<option value="{{ k.value }}"{% if k == item.kind %} selected{% endif %}>{{ k.value }}</option>{% endfor %}</select></div>
     <div><label for="unit">Unit</label><input id="unit" name="unit" type="text" maxlength="30" value="{{ item.unit }}" required></div>
-    <div><label for="review_state">Review</label>
-      <select id="review_state" name="review_state">{% for s in review_states %}<option value="{{ s.value }}"{% if s == item.review_state %} selected{% endif %}>{{ s.value }}</option>{% endfor %}</select></div>
     <button type="submit">Save</button>
   </form>
-  <p class="muted">The slug never changes. The unit cannot change once requirements, prices, stock or purchases use it.</p>
+  <p class="muted">The slug never changes. The unit cannot change once requirements, prices, stock or purchases use it.
+  {%- if item.review_state.value == "unreviewed" and not item.merged %}
+  Saving confirms the item, as does counting its stock or buying it.</p>
+  <form method="post" action="/catalog/{{ item.id }}/confirm" class="inline" id="confirm-item">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary">Confirm as is</button>
+    <span class="muted">You have looked at it: a manifest can then no longer change its kind or unit.</span>
+  </form>
+  {%- else %}</p>{% endif %}
   {% if not item.merged and merge_targets %}
   <h2>Merge into another item</h2>
   <form method="post" action="/catalog/{{ item.id }}/merge" class="row"

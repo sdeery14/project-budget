@@ -12,6 +12,7 @@ from projectbudget.api.schemas import (
     MergeIn,
     MovementOut,
 )
+from projectbudget.domain.catalog import ReviewState
 from projectbudget.domain.money import Money
 from projectbudget.services import catalog, inventory, workspace
 from projectbudget.web.auth import Owner, require_owner, session_factory
@@ -21,9 +22,18 @@ router = APIRouter(prefix="/catalog/items", tags=["catalog"], dependencies=[Depe
 
 @router.get("")
 def list_items(
-    request: Request, principal: Owner, include_merged: bool = False
+    request: Request,
+    principal: Owner,
+    include_merged: bool = False,
+    review_state: ReviewState | None = None,
 ) -> list[CatalogItemOut]:
-    rows = catalog.list_items(session_factory(request), principal, include_merged=include_merged)
+    """Every live item; ``review_state=unreviewed`` is the catalog page's filter (#36)."""
+    rows = catalog.list_items(
+        session_factory(request),
+        principal,
+        include_merged=include_merged,
+        review_state=review_state,
+    )
     return [CatalogItemOut.of(i) for i in rows]
 
 

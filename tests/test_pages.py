@@ -292,3 +292,52 @@ def test_backlog_reorder_over_htmx_and_plain_post(logged_in: TestClient) -> None
         f"/backlog/{ids[0]}/move", data={"csrf_token": csrf, "direction": "left"}
     )
     assert sideways.status_code == 422
+
+
+def test_catalog_page_explains_confirming_and_offers_it_per_row(logged_in: TestClient) -> None:
+    """#36: what confirming does, a Confirm button on unreviewed rows, and an unreviewed filter."""
+    csrf = _csrf(logged_in)
+    project_id = _location_id(
+        logged_in.post("/projects", data={"csrf_token": csrf, "name": "Shed"})
+    )
+    for name in ("Hinge", "Latch"):
+        logged_in.post(
+            f"/projects/{project_id}/requirements",
+            data={"csrf_token": csrf, "item_text": name, "qty": "1"},
+        )
+    page = logged_in.get("/catalog").text
+    assert 'id="review-help"' in page
+    assert "can then no longer change its kind or unit" in page
+    assert 'href="/catalog?review=unreviewed">unreviewed (2)</a>' in page
+    assert page.count('/confirm"') == 2  # one form per unreviewed row (confirm.js aside)
+    hinge_id = page.split('href="/catalog/')[1].split('"')[0]
+
+    filtered = logged_in.get("/catalog?review=unreviewed").text
+    assert "<strong>unreviewed</strong>" in filtered
+    assert filtered.count("<tr id=") == 2
+    confirmed = logged_in.post(
+        f"/catalog/{hinge_id}/confirm", data={"csrf_token": csrf, "review": "unreviewed"}
+    )
+    assert confirmed.status_code == 303
+    assert confirmed.headers["location"] == "/catalog?review=unreviewed"
+    filtered = logged_in.get("/catalog?review=unreviewed").text
+    assert filtered.count("<tr id=") == 1
+    assert "Hinge" not in filtered
+
+    item_page = logged_in.get(f"/catalog/{hinge_id}").text
+    assert 'name="review_state"' not in item_page  # the select is gone; saving confirms
+    assert 'id="confirm-item"' not in item_page  # already confirmed
+    assert "Confirmed: you have looked at this item" in item_page
+    latch_id = filtered.split('href="/catalog/')[1].split('"')[0]
+    latch_page = logged_in.get(f"/catalog/{latch_id}").text
+    assert 'id="confirm-item"' in latch_page
+    assert "Saving confirms the item" in latch_page
+    saved = logged_in.post(
+        f"/catalog/{latch_id}",
+        data={"csrf_token": csrf, "name": "Gate latch", "kind": "consumable", "unit": "each"},
+    )
+    assert saved.status_code == 303
+    assert (
+        "Nothing to review: every item is confirmed."
+        in logged_in.get("/catalog?review=unreviewed").text
+    )
