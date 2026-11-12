@@ -68,6 +68,8 @@ def test_budget_page_creates_a_plan_and_overrides(logged_in: TestClient) -> None
     assert "Dec 2026" in page
     assert "-120.00" in page
     assert "Car insurance" in page
+    assert '<table id="overrides" class="responsive">' in page  # stacks at phone width
+    assert '<td data-label="Label">Car insurance</td>' in page
     override_id = logged_in.get("/api/v1/budget/plan").json()["overrides"][0]["id"]
     removed = logged_in.post(f"/budget/overrides/{override_id}/delete", data={"csrf_token": csrf})
     assert removed.status_code == 303
