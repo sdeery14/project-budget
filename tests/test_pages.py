@@ -50,6 +50,19 @@ def test_backlog_says_covered_by_stock_only_once_requirements_exist(
     assert "Nothing to buy: every active requirement is covered by stock." in covered
     assert "Nothing here yet" not in covered
 
+    # Pause the only requirement: nothing is active, which is not the same as nothing at all.
+    requirement_id = (
+        logged_in.get(f"/projects/{project_id}").text.split("/requirements/")[1].split("/")[0]
+    )
+    paused = logged_in.post(
+        f"/requirements/{requirement_id}/intent", data={"csrf_token": csrf, "intent": "paused"}
+    )
+    assert paused.status_code in (200, 303), paused.text
+    idle = logged_in.get("/backlog").text
+    assert "No active requirements: everything is paused, cancelled or archived." in idle
+    assert "Nothing here yet" not in idle
+    assert "covered by stock" not in idle
+
 
 def test_core_journey_through_the_pages(logged_in: TestClient) -> None:
     csrf = _csrf(logged_in)

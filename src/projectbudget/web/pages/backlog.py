@@ -36,7 +36,7 @@ def _context(request: Request, principal: Principal) -> dict[str, Any]:
         "backlog": current,
         "project_names": names,
         "assumptions": ASSUMPTIONS,
-        "has_requirements": requirements.any_active(factory, principal),
+        "presence": requirements.presence(factory, principal),
     }
 
 
