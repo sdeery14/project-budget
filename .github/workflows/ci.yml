@@ -109,6 +109,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION: 0.0.0.dev0
+      NEXT_VERSION: 0.0.0.dev1
     steps:
       - uses: actions/checkout@v5
       - name: Build image
@@ -121,10 +122,10 @@ jobs:
       - name: A rebuild with a new version on the warm cache picks it up
         # The uv cache mount survives between builds; it once kept the previous version's project wheel.
         run: |
-          docker build --build-arg "VERSION=${VERSION}.post1" -t projectbudget:ci-next .
+          docker build --build-arg "VERSION=${NEXT_VERSION}" -t projectbudget:ci-next .
           built="$(docker run --rm --entrypoint projectbudget projectbudget:ci-next version)"
           echo "projectbudget version (rebuild) -> ${built}"
-          test "${built}" = "${VERSION}.post1" || { echo "::error::rebuild reports ${built}, expected ${VERSION}.post1"; exit 1; }
+          test "${built}" = "${NEXT_VERSION}" || { echo "::error::rebuild reports ${built}, expected ${NEXT_VERSION}"; exit 1; }
       - name: Run with SQLite on a volume and wait for /health
         run: |
           docker run -d --name pb -p 8000:8000 -v pb-data:/data projectbudget:ci
