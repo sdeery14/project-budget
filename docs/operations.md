@@ -82,6 +82,16 @@ Do this once after installing and again before every upgrade, so you know it wor
 
 **PostgreSQL:** `pg_restore` or `psql < dump.sql` into an empty database, then `projectbudget db upgrade` and start the app.
 
+## Reset
+
+To start over with an empty workspace, keeping the owner, every signed-in session, the API tokens and the currency:
+
+```
+projectbudget reset          # asks first; --yes skips the question
+```
+
+It deletes every project, catalog item, requirement, price, stock movement, purchase, the budget plan and the sync sources with their run history, in one transaction. Take a backup or an export first if there is any chance you want the data back. In the container: `docker exec -it projectbudget projectbudget reset`. Sync sources are not kept because they belong to the projects they created; add them again on the Sync page and apply.
+
 ## Upgrade
 
 1. Take a backup (above).

@@ -31,17 +31,30 @@ class ItemRow:
     on_hand: int
 
 
-def _list_context(request: Request, principal: Principal, **extra: Any) -> dict[str, Any]:
+UNREVIEWED = "unreviewed"
+
+
+def _list_context(
+    request: Request, principal: Principal, *, review: str = "all", **extra: Any
+) -> dict[str, Any]:
     factory = session_factory(request)
+    only = ReviewState.UNREVIEWED if review == UNREVIEWED else None
     rows = [
         ItemRow(
             item=item,
             estimate=catalog.current_estimate(factory, principal, item.id),
             on_hand=inventory.on_hand(factory, principal, item.id),
         )
-        for item in catalog.list_items(factory, principal)
+        for item in catalog.list_items(factory, principal, review_state=only)
     ]
-    return {"rows": rows, "kinds": list(ItemKind), **extra}
+    unreviewed = catalog.list_items(factory, principal, review_state=ReviewState.UNREVIEWED)
+    return {
+        "rows": rows,
+        "kinds": list(ItemKind),
+        "review": UNREVIEWED if only else "all",
+        "unreviewed_count": len(unreviewed),
+        **extra,
+    }
 
 
 def _detail_context(
@@ -70,8 +83,23 @@ def _detail_context(
 
 
 @router.get(CATALOG_PATH, response_class=HTMLResponse)
-def catalog_page(request: Request, principal: Owner) -> HTMLResponse:
-    return render(request, "catalog.html", _list_context(request, principal))
+def catalog_page(request: Request, principal: Owner, review: str = "all") -> HTMLResponse:
+    return render(request, "catalog.html", _list_context(request, principal, review=review))
+
+
+@router.post(CATALOG_PATH + "/{item_id}/confirm")
+def confirm_item(
+    request: Request, principal: Owner, item_id: str, review: Annotated[str, Form()] = "all"
+) -> Response:
+    """The catalog row's one-click confirm (#36); the API twin is PATCH with ``review_state``."""
+    catalog.update_item(
+        session_factory(request),
+        principal,
+        item_id,
+        catalog.CatalogItemUpdate(review_state=ReviewState.CONFIRMED),
+    )
+    back = f"{CATALOG_PATH}?review={UNREVIEWED}" if review == UNREVIEWED else CATALOG_PATH
+    return RedirectResponse(back, status_code=303)
 
 
 @router.post(CATALOG_PATH, response_class=HTMLResponse)
@@ -123,8 +151,9 @@ def update_item(
     name: Annotated[str, Form()],
     kind: Annotated[ItemKind, Form()],
     unit: Annotated[str, Form()],
-    review_state: Annotated[ReviewState, Form()],
+    review_state: Annotated[ReviewState | None, Form()] = None,
 ) -> Response:
+    """Saving the form confirms the item unless the form says otherwise (#36)."""
     try:
         catalog.update_item(
             session_factory(request),

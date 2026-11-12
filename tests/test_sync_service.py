@@ -559,7 +559,11 @@ def test_source_owned_item_follows_kind_and_unit_until_it_is_referenced_elsewher
     )
     assert back.plan is not None
     assert [r.external_id for r in back.plan.rejects] == ["fuel-line"]
-    assert back.plan.rejects[0].because == "it is used by stock movements"
+    # Counting the stock also confirmed the item (#36), so the reject names both reasons.
+    assert (
+        back.plan.rejects[0].because
+        == "you confirmed it in the catalog and it is used by stock movements"
+    )
     assert catalog.get_item(session_factory, principal, fuel.id).unit == "ft"
     # The advice must be something the catalog allows: the unit is locked by the stock
     # (and the requirement), so only the manifest can give way (review finding on #46).

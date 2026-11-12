@@ -289,6 +289,17 @@ def create_item(
         return _item_info(insert_item(db, command, now or utcnow()))
 
 
+def confirm(db: Session, row: CatalogItem, now: datetime) -> None:
+    """The owner has looked at this item, so manifests may no longer change its kind or unit.
+
+    Called when the owner edits the item, counts its stock or buys it (ADR-012, #36); the
+    protection itself is ADR-007's and is unchanged. A sync never calls this.
+    """
+    if row.review_state != ReviewState.CONFIRMED.value:
+        row.review_state = ReviewState.CONFIRMED.value
+        row.updated_at = now
+
+
 def update_item(
     session_factory: SessionFactory,
     principal: Principal,
@@ -314,6 +325,8 @@ def update_item(
             row.unit = unit
         if command.review_state is not None:
             row.review_state = ReviewState(command.review_state).value
+        elif name is not None or command.kind is not None or unit is not None:
+            confirm(db, row, now or utcnow())  # editing by hand is reviewing (#36)
         row.updated_at = now or utcnow()
         return _item_info(row)
 
@@ -334,11 +347,17 @@ def get_item_by_slug(
 
 
 def list_items(
-    session_factory: SessionFactory, principal: Principal, *, include_merged: bool = False
+    session_factory: SessionFactory,
+    principal: Principal,
+    *,
+    include_merged: bool = False,
+    review_state: ReviewState | None = None,
 ) -> list[CatalogItemInfo]:
     query = select(CatalogItem).order_by(CatalogItem.name, CatalogItem.id)
     if not include_merged:
         query = query.where(CatalogItem.merged_into_id.is_(None))
+    if review_state is not None:
+        query = query.where(CatalogItem.review_state == ReviewState(review_state).value)
     with session_factory() as db:
         return [_item_info(row) for row in db.scalars(query).all()]
 

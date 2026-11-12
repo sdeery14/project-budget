@@ -232,6 +232,36 @@ def import_cmd(
     )
 
 
+@app.command("reset")
+def reset_cmd(
+    ctx: typer.Context,
+    yes: Annotated[bool, typer.Option("--yes", help="Do not ask for confirmation.")] = False,
+) -> None:
+    """Empty the workspace: every project, item, requirement, price, stock movement, purchase,
+    plan and sync source. The owner, sessions, API tokens and currency stay (#33)."""
+    if not yes:
+        typer.confirm(
+            "Delete every project, item, requirement, price, stock movement, purchase, plan "
+            "and sync source in this workspace? The owner, sessions and API tokens stay",
+            abort=True,
+        )
+    engine = make_engine(_settings(ctx).effective_database_url)
+    try:
+        factory = make_session_factory(engine)
+        try:
+            principal = auth.owner_principal(factory)
+        except auth.NoOwnerError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+        transfer.wipe_workspace(factory, principal)
+    finally:
+        engine.dispose()
+    typer.echo(
+        "Workspace emptied. The owner, sessions, API tokens and currency are kept; "
+        "sync sources must be added again."
+    )
+
+
 @app.command("sync")
 def sync_cmd(
     ctx: typer.Context,

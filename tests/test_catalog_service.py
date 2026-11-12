@@ -275,3 +275,58 @@ def test_unit_cannot_change_once_purchase_lines_reference_the_item_in_any_status
                 session_factory, principal, rope.id, catalog.CatalogItemUpdate(unit="ft")
             )
         assert catalog.get_item(session_factory, principal, rope.id).unit == "m"
+
+
+def _unreviewed(
+    session_factory: SessionFactory, principal: Principal, name: str
+) -> catalog.CatalogItemInfo:
+    return catalog.create_item(
+        session_factory,
+        principal,
+        catalog.CatalogItemCreate(name=name, review_state=ReviewState.UNREVIEWED),
+    )
+
+
+def test_owner_actions_confirm_an_item_and_the_list_can_filter_on_it(
+    session_factory: SessionFactory, principal: Principal
+) -> None:
+    """#36: editing, counting stock for or buying an item is reviewing it; the API keeps control."""
+    edited = _unreviewed(session_factory, principal, "Edited item")
+    counted = _unreviewed(session_factory, principal, "Counted item")
+    bought = _unreviewed(session_factory, principal, "Bought item")
+    explicit = _unreviewed(session_factory, principal, "Explicit item")
+    untouched = _unreviewed(session_factory, principal, "Left alone")
+    assert all(
+        i.review_state is ReviewState.UNREVIEWED for i in (edited, counted, bought, explicit)
+    )
+
+    catalog.update_item(
+        session_factory, principal, edited.id, catalog.CatalogItemUpdate(name="Edited item 2")
+    )
+    inventory.adjust(session_factory, principal, counted.id, 1, note="stock take")
+    purchases.record_purchase(
+        session_factory,
+        principal,
+        purchases.PurchaseCreate(
+            lines=(
+                purchases.PurchaseLineCreate(
+                    catalog_item_id=bought.id, qty=1, unit_price=Money(100, "USD")
+                ),
+            )
+        ),
+    )
+    # An explicit review state on the update wins, so the API can keep an item unreviewed.
+    catalog.update_item(
+        session_factory,
+        principal,
+        explicit.id,
+        catalog.CatalogItemUpdate(name="Explicit item 2", review_state=ReviewState.UNREVIEWED),
+    )
+    states = {i.name: i.review_state for i in catalog.list_items(session_factory, principal)}
+    assert states["Edited item 2"] is ReviewState.CONFIRMED
+    assert states["Counted item"] is ReviewState.CONFIRMED
+    assert states["Bought item"] is ReviewState.CONFIRMED
+    assert states["Explicit item 2"] is ReviewState.UNREVIEWED
+    assert states["Left alone"] is ReviewState.UNREVIEWED
+    unreviewed = catalog.list_items(session_factory, principal, review_state=ReviewState.UNREVIEWED)
+    assert {i.id for i in unreviewed} == {explicit.id, untouched.id}

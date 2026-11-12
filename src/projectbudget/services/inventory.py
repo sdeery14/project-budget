@@ -26,7 +26,7 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import InventoryMovement
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services.catalog import load_live_item, lock_item
+from projectbudget.services.catalog import confirm, load_live_item, lock_item
 from projectbudget.services.clock import today, utcnow
 from projectbudget.services.guards import require_write
 from projectbudget.services.requirements import load_requirement
@@ -188,6 +188,7 @@ def adjust(
     with session_factory.begin() as db:
         item = load_live_item(db, item_id)  # a merged id means the item it was merged into
         lock_item(db, item.id)  # serialises against concurrent adjustments and consumption
+        confirm(db, item, now or utcnow())  # counting stock is reviewing the item (#36)
         current = on_hand_in(db, item.id)
         if current + delta < 0:
             raise InsufficientOnHandError(item.id, current, -delta)
