@@ -6,7 +6,7 @@
   {% if project.notes %}<p>{{ project.notes }}</p>{% endif %}
   {% if source %}
   <p class="muted" id="synced-from">Synced from <a href="/sync/{{ source.id }}">{{ source.label }}</a>
-    {%- if last_applied %}, last applied {{ last_applied.created_at.strftime("%Y-%m-%d %H:%M") }} UTC
+    {%- if last_applied %}, last applied {{ last_applied.created_at | local }} ({{ tz_label }})
     {%- if last_applied.revision %} (revision <code>{{ last_applied.revision[:12] }}</code>){% endif %}
     {%- else %}, not applied yet{% endif %}. The manifest manages the requirements below; preview and apply
     on the source page to bring in its changes.</p>
