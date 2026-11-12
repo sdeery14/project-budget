@@ -107,15 +107,27 @@ jobs:
   docker:
     name: Container answers /health
     runs-on: ubuntu-latest
+    env:
+      VERSION: 0.0.0.dev0
     steps:
       - uses: actions/checkout@v5
       - name: Build image
-        run: docker build --build-arg VERSION=0.0.0.dev0 -t projectbudget:ci .
+        run: docker build --build-arg "VERSION=${VERSION}" -t projectbudget:ci .
+      - name: The image carries the version it was built with
+        run: |
+          built="$(docker run --rm --entrypoint projectbudget projectbudget:ci version)"
+          echo "projectbudget version -> ${built}"
+          test "${built}" = "${VERSION}" || { echo "::error::expected ${VERSION}, got ${built}"; exit 1; }
       - name: Run with SQLite on a volume and wait for /health
         run: |
           docker run -d --name pb -p 8000:8000 -v pb-data:/data projectbudget:ci
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/health; then echo; exit 0; fi
+            if health="$(curl -fsS http://127.0.0.1:8000/health)"; then
+              echo "${health}"
+              echo "${health}" | grep -q "\"version\":\"${VERSION}\"" \
+                || { echo "::error::/health does not report version ${VERSION}"; exit 1; }
+              exit 0
+            fi
             sleep 1
           done
           echo "::error::/health did not answer within 30s"; docker logs pb; exit 1

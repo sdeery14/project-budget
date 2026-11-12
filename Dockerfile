@@ -6,12 +6,14 @@ ARG PYTHON_VERSION=3.12
 # --- build: resolve the locked environment and install the package -----------------
 FROM ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-bookworm-slim AS builder
 
-# The build context has no .git, so hatch-vcs needs the version handed in.
+# The build context has no .git, so hatch-vcs needs the version handed in. It must be the
+# generic SETUPTOOLS_SCM_PRETEND_VERSION: hatch-vcs calls setuptools-scm without a distribution
+# name, so the _FOR_PROJECTBUDGET form is ignored and the build falls back to 0.0.0.
 ARG VERSION=0.0.0
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=0 \
-    SETUPTOOLS_SCM_PRETEND_VERSION_FOR_PROJECTBUDGET=${VERSION}
+    SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION}
 
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md LICENSE NOTICE ./

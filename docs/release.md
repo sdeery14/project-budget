@@ -14,7 +14,7 @@ Versions come from git tags (hatch-vcs). Tagging `vX.Y.Z` on `main` runs `.githu
 - [ ] `CHANGELOG.md` has a `## [X.Y.Z] - YYYY-MM-DD` section; the Unreleased section is empty.
 - [ ] `uv run pip-audit` is clean and Dependabot has nothing open that matters.
 - [ ] Restore drill (see `docs/operations.md`): take a `projectbudget backup` and a `projectbudget export` of a real-looking workspace, restore each into a fresh database, confirm the backlog and timeline match.
-- [ ] Fresh-clone check: on a machine without the repo, `uvx projectbudget init --username you` and `uvx projectbudget run` reach the login page; `docker run` of the previous image answers `/health` with no secrets set (acceptance test 8, first half).
+- [ ] Fresh-clone check: on a machine without the repo, `uvx projectbudget init --username you` and `uvx projectbudget run` reach the login page; `docker run` of the previous image answers `/health` with no secrets set and reports its version, not `0.0.0` (acceptance test 8, first half).
 - [ ] Someone unaffiliated follows `README.md` to a working install and reports what was unclear (acceptance test 8, second half). Fix the README before tagging, not after.
 - [ ] `docs/threat-model.md` still describes the release; update the residual risks if anything changed.
 - [ ] Accessibility pass: every form control has a label, the skip link works, every page is usable at 320 px width and with keyboard only.
