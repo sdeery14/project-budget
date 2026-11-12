@@ -15,7 +15,7 @@
              value="{{ plan.earmarked_funds if plan else '' }}" placeholder="150.00"></div>
     <div><label for="balance_as_of">Balance as of</label>
       <input id="balance_as_of" name="balance_as_of" type="date"
-             value="{{ plan.balance_as_of.isoformat() if plan else '' }}"></div>
+             value="{{ plan.balance_as_of.isoformat() if plan else today.isoformat() }}"></div>
     <div><label for="protected_reserve">Protected reserve</label>
       <input id="protected_reserve" name="protected_reserve" type="text" inputmode="decimal"
              value="{{ plan.protected_reserve if plan else '0.00' }}"></div>

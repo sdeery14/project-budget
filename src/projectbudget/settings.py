@@ -8,9 +8,11 @@ Every setting comes from the environment (prefix ``PROJECTBUDGET_``) or from a
 
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
+
+from projectbudget import localtime
 
 DEFAULT_DATA_DIR = Path.home() / ".projectbudget"
 SQLITE_FILENAME = "projectbudget.sqlite"
@@ -74,6 +76,24 @@ class Settings(BaseSettings):
             "the environment or .env, never stored; a source's own token variable overrides it."
         ),
     )
+
+    timezone: str | None = Field(
+        default=None,
+        description=(
+            "IANA time zone (e.g. Europe/Amsterdam) for 'today' and for dates derived from "
+            "file or commit times, and for timestamps shown on pages (ADR-012, #27). "
+            "Default: the server's own zone, which is UTC inside the container."
+        ),
+    )
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_timezone(cls, value: str | None) -> str | None:
+        name = (value or "").strip()
+        if not name:
+            return None
+        localtime.resolve(name)  # raises UnknownTimezoneError, a ValueError, on a bad name
+        return name
 
     @property
     def effective_sync_import_dir(self) -> Path:

@@ -11,8 +11,9 @@ from typing import Annotated
 
 import typer
 import uvicorn
+from pydantic import ValidationError
 
-from projectbudget import __version__
+from projectbudget import __version__, localtime
 from projectbudget.adapters.export_format import InvalidDocumentError, parse_document
 from projectbudget.adapters.sources import SourceFetchError
 from projectbudget.cli import demo as demo_mode
@@ -50,11 +51,16 @@ def main(
 ) -> None:
     # An explicit option beats the environment and .env; nothing is written back to
     # os.environ here, so the override cannot leak into other code or tests.
-    settings = Settings(database_url=database_url) if database_url else Settings()
+    try:
+        settings = Settings(database_url=database_url) if database_url else Settings()
+    except ValidationError as exc:
+        typer.echo(f"Invalid setting: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
     try:
         backend_name(settings.effective_database_url)
     except UnsupportedDatabaseError as exc:
         raise typer.BadParameter(str(exc), param_hint="--database-url") from exc
+    localtime.configure(settings.timezone)
     ctx.obj = settings
 
 

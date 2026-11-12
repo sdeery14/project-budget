@@ -3,6 +3,7 @@
 JSON twin: ``/api/v1/purchases``.
 """
 
+from collections.abc import Mapping
 from datetime import date
 from typing import Annotated, Any
 
@@ -14,6 +15,7 @@ from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.services import catalog, purchases, workspace
 from projectbudget.services.errors import USER_ERRORS
+from projectbudget.services.purchases import PurchaseInfo
 from projectbudget.web.auth import Owner, session_factory
 from projectbudget.web.templates import render
 
@@ -22,11 +24,24 @@ PURCHASES_PATH = "/purchases"
 router = APIRouter(tags=["pages"])
 
 
+def describe(purchase: PurchaseInfo, names: Mapping[str, str]) -> str:
+    """What a purchase is about: its first item, "and N more" when it has more lines (#23)."""
+    if not purchase.lines:
+        return "no lines"
+    first = names.get(purchase.lines[0].catalog_item_id, "unknown item")
+    more = len(purchase.lines) - 1
+    return first if more == 0 else f"{first} and {more} more"
+
+
 def _list_context(request: Request, principal: Principal, **extra: Any) -> dict[str, Any]:
     factory = session_factory(request)
+    every_item = catalog.list_items(factory, principal, include_merged=True)
+    names = {item.id: item.name for item in every_item}
+    listed = purchases.list_purchases(factory, principal)
     return {
-        "purchases": purchases.list_purchases(factory, principal),
-        "items": catalog.list_items(factory, principal),
+        "purchases": listed,
+        "summaries": {purchase.id: describe(purchase, names) for purchase in listed},
+        "items": [item for item in every_item if not item.merged],
         "currency": workspace.get_currency(factory),
         "statuses": [PurchaseStatus.PLANNED, PurchaseStatus.ORDERED, PurchaseStatus.RECEIVED],
         **extra,
@@ -41,6 +56,7 @@ def _detail_context(
     items = {item.id: item for item in catalog.list_items(factory, principal, include_merged=True)}
     return {
         "purchase": info,
+        "summary": describe(info, {item_id: item.name for item_id, item in items.items()}),
         "items": items,
         "catalog": [item for item in items.values() if not item.merged],
         "currency": workspace.get_currency(factory),

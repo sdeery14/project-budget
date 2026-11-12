@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from projectbudget import localtime
 from projectbudget.adapters import sources
 from projectbudget.adapters.sources import GitHubClient, GitHubNotFoundError, SourceFetchError
 
@@ -169,3 +170,20 @@ def test_default_getter_only_talks_to_api_github_com() -> None:
     ):
         with pytest.raises(SourceFetchError, match=r"only api.github.com"):
             sources.default_getter(url, {})
+
+
+def test_derived_dates_are_the_owners_date_not_the_utc_date(tmp_path: Path) -> None:
+    """#27: a file saved or a commit made at 19:04 in New York is dated that day, not tomorrow."""
+    localtime.configure("America/New_York")
+    try:
+        target = tmp_path / "project-budget.yaml"
+        target.write_bytes(b"version: 1\n")
+        stamp = datetime(2026, 11, 10, 0, 4, tzinfo=UTC).timestamp()
+        os.utime(target, (stamp, stamp))
+        assert sources.fetch_file("project-budget.yaml", tmp_path).as_of == date(2026, 11, 9)
+        fetched = GitHubClient(FakeGitHub(when="2026-11-10T00:04:00Z")).fetch(
+            "someone/some-repo", branch=None, path="project-budget.yaml", token=None
+        )
+        assert fetched.as_of == date(2026, 11, 9)
+    finally:
+        localtime.configure(None)

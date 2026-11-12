@@ -141,11 +141,11 @@
 <section class="card">
   <h2>Runs</h2>
   <table id="runs" class="responsive">
-    <thead><tr><th>When (UTC)</th><th>Status</th><th>Revision</th><th>Summary</th></tr></thead>
+    <thead><tr><th>When ({{ tz_label }})</th><th>Status</th><th>Revision</th><th>Summary</th></tr></thead>
     <tbody>
       {% for run in runs %}
       <tr>
-        <td data-label="When (UTC)">{{ run.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td data-label="When ({{ tz_label }})">{{ run.created_at | local }}</td>
         <td data-label="Status"><span class="badge{% if run.status.value in ('rejected', 'failed') %} warn{% endif %}">{{ run.status.value }}</span></td>
         <td data-label="Revision">{% if run.revision %}<code>{{ run.revision[:12] }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td data-label="Summary"><span>{% for key, value in run.summary.items() %}{{ key }}: {{ value if value is not iterable or value is string else value | join("; ") }}{% if not loop.last %} · {% endif %}{% endfor %}</span></td>
