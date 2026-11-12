@@ -111,6 +111,16 @@ def test_timeline_page_explains_each_month_and_draws_the_chart(
     assert 'data-conservative=\'["67.50", "92.50", "14.15"]\'' in html.unescape(text)
     assert "vendor/chartjs/chart.umd.js" in text
     assert "static/timeline.js" in text
+    # #22: the caption says why the optimistic line can dip below the conservative one, and
+    # the bars carry their items for the tooltip.
+    assert 'id="chart-caption"' in text
+    assert "affords a purchase sooner" in text
+    assert "adds the 10 % contingency" in text
+    assert (
+        "data-purchase-items='"
+        '[["Bar clamp 600 mm"], [], ["Bench vise 125 mm", "M8 carriage bolt 80 mm"]]\''
+        in html.unescape(text)
+    )
     assert (STATIC_DIR / "timeline.js").exists()
     assert logged_in.get("/static/vendor/chartjs/chart.umd.js").status_code == 200
 

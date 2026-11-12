@@ -55,7 +55,7 @@ A CSV source has fixed columns `id,name,qty,unit,kind,priority,sharing,catalog,e
 
 **Order matters.** List items in the order you intend to buy them. Within a priority tier the backlog and the timeline follow it (ADR-012), so a part comes after the thing it attaches to when the file says so. Moving a row on the Backlog page overrides the default order for the whole workspace until you move again.
 
-**Attaching to a project you built by hand.** Choose the project when adding the source (the Add source form, or `project_id` on the API). The source then syncs into that project instead of creating one: on the first apply, each hand-entered requirement whose catalog item the manifest also names is adopted, and everything else in the project stays manual and untouched. A manifest item whose catalog item is not in the project is created as usual. A project can follow only one source.
+**Attaching to a project you built by hand.** Choose the project when adding the source (the Add source form, or `project_id` on the API). The source then syncs into that project instead of creating one: on the first apply, each hand-entered requirement whose catalog item the manifest also names is adopted, and everything else in the project stays manual and untouched. A manifest item whose catalog item is not in the project is created as usual. A project can follow only one source. A synced project's page says which source it follows and when it was last applied, and marks hand-added rows "manual" so it is clear which rows the manifest does not know about.
 
 **Detach** removes the source and its run history; the project and its requirements stay and become manual.
 

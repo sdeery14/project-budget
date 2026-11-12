@@ -4,6 +4,13 @@
 <section class="card">
   <h1>{{ project.name }}{% if project.archived %} <span class="badge">archived</span>{% endif %}</h1>
   {% if project.notes %}<p>{{ project.notes }}</p>{% endif %}
+  {% if source %}
+  <p class="muted" id="synced-from">Synced from <a href="/sync/{{ source.id }}">{{ source.label }}</a>
+    {%- if last_applied %}, last applied {{ last_applied.created_at.strftime("%Y-%m-%d %H:%M") }} UTC
+    {%- if last_applied.revision %} (revision <code>{{ last_applied.revision[:12] }}</code>){% endif %}
+    {%- else %}, not applied yet{% endif %}. The manifest manages the requirements below; preview and apply
+    on the source page to bring in its changes.</p>
+  {% endif %}
   <p><a href="/projects">All projects</a> · <a href="/backlog">Backlog</a></p>
   <form method="post" action="/projects/{{ project.id }}/archive" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -14,6 +21,11 @@
 
 <section class="card">
   <h2>Add a requirement</h2>
+  {% if source %}
+  <p class="alert warning" role="note" id="manual-note">This project is synced. A requirement added here stays
+  <strong>manual</strong>: the manifest never changes or archives it, and a later sync adopts it only if the manifest
+  names its catalog item. To add something the manifest should manage, add it to the manifest instead.</p>
+  {% endif %}
   {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/projects/{{ project.id }}/requirements" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -69,5 +81,8 @@
     </tbody>
   </table>
   </div>
+  <p class="muted" id="sharing-note">Sharing matters for reusable items only: a shared tool is counted once across
+  projects at the largest single demand, an exclusive one is counted per project. Consumables are used up, so their
+  sharing is shown greyed out and changes nothing.</p>
 </section>
 {% endblock %}

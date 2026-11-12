@@ -19,7 +19,7 @@ def _console_errors(page: Page) -> list[str]:
     seen: list[str] = []
 
     def record(message: ConsoleMessage) -> None:
-        if message.type == "error" and "favicon.ico" not in message.text:  # #16 is open
+        if message.type == "error":
             seen.append(message.text)
 
     page.on("console", record)

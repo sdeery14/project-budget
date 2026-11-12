@@ -4,13 +4,14 @@
     <span>
     <a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a>
     <span class="badge">{{ row.item.kind.value }}</span>
+    {% if row.manual %}<span class="badge" title="Added by hand on a synced project: the manifest does not know about it">manual</span>{% endif %}
     {% if r.notes %}<div class="muted">{{ r.notes }}</div>{% endif %}
     {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
     </span>
   </td>
   <td class="num" data-label="Qty">{{ r.qty }} {{ row.item.unit }}</td>
   <td data-label="Priority"><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td>
-  <td data-label="Sharing">{{ r.sharing.value if row.item.kind.value == "reusable" else "—" }}</td>
+  <td data-label="Sharing">{% if row.item.kind.value == "reusable" %}{{ r.sharing.value }}{% else %}<span class="muted" title="Sharing only matters for reusable items; a consumable is used up">{{ r.sharing.value }}</span>{% endif %}</td>
   <td data-label="Intent"><span>{{ r.intent.value }}{% if r.archive_reason %} <span class="muted">({{ r.archive_reason }})</span>{% endif %}</span></td>
   <td class="num" data-label="Consumed">{{ row.consumed }}</td>
   <td class="num" data-label="On hand">{{ row.on_hand }}</td>

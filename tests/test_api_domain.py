@@ -46,6 +46,7 @@ def test_project_requirement_estimate_round_trip(logged_in: TestClient) -> None:
     )
     assert req["intent"] == "active"
     assert req["sharing"] == "shared"
+    assert req["source_id"] is None  # entered by hand, not managed by a manifest
     bolt = logged_in.get(f"/api/v1/catalog/items/{req['catalog_item_id']}").json()
     assert bolt["review_state"] == "unreviewed"
     listed = logged_in.get(f"/api/v1/projects/{project['id']}/requirements").json()
