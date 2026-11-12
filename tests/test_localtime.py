@@ -78,21 +78,25 @@ def test_pages_show_times_in_the_configured_zone_and_say_which(
             "/sync", data={"csrf_token": csrf, "kind": "file", "locator": "shed.yaml"}
         )
         source_id = created.headers["location"].rsplit("/", 1)[1]
-    factory = make_session_factory(make_engine(settings.effective_database_url))
-    principal = Principal(owner_id=owner.id, username=owner.username, auth="session")
-    with factory.begin() as db:
-        db.add(
-            SyncRun(
-                id="run-at-midnight-utc",
-                source_id=source_id,
-                status="applied",
-                revision="abc",
-                content_hash="x" * 64,
-                summary="{}",
-                created_at=OAT_INSTANT.replace(tzinfo=None),
+    engine = make_engine(settings.effective_database_url)
+    try:
+        factory = make_session_factory(engine)
+        principal = Principal(owner_id=owner.id, username=owner.username, auth="session")
+        with factory.begin() as db:
+            db.add(
+                SyncRun(
+                    id="run-at-midnight-utc",
+                    source_id=source_id,
+                    status="applied",
+                    revision="abc",
+                    content_hash="x" * 64,
+                    summary="{}",
+                    created_at=OAT_INSTANT.replace(tzinfo=None),
+                )
             )
-        )
-    assert len(sync.list_runs(factory, principal, source_id)) == 1
+        assert len(sync.list_runs(factory, principal, source_id)) == 1
+    finally:
+        engine.dispose()
     with make_client(settings) as client:
         log_in(client)
         page = client.get(f"/sync/{source_id}").text
