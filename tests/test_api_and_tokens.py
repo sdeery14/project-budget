@@ -98,6 +98,9 @@ def test_token_page_create_and_revoke(logged_in: TestClient) -> None:
     assert "Copy it now" in created.text
     assert "pb_" in created.text
     assert "read-only" in created.text
+    listed = logged_in.get("/settings/tokens").text
+    assert '<table id="tokens" class="responsive">' in listed  # stacks at phone width
+    assert '<td data-label="Access">read-only</td>' in listed
 
     token_id = logged_in.get("/api/v1/tokens").json()[0]["id"]
     # HTMX gets the replaced row; a plain form post gets redirected back to the page.
