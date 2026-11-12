@@ -209,3 +209,58 @@ def test_a_sync_source_page_fits_a_phone(signed_in: Page, live_server: LiveServe
         page.goto(path)
         width = page.evaluate("() => document.documentElement.scrollWidth")
         assert width <= PHONE_WIDTH, f"{path} is {width}px wide at {PHONE_WIDTH}px"
+
+
+def test_tokens_item_and_budget_tables_fit_a_phone(
+    signed_in: Page, live_server: LiveServer
+) -> None:
+    """The tokens, estimates, movements and overrides tables stack at phone width (release pass)."""
+    page = signed_in
+    errors = _console_errors(page)
+
+    page.goto(f"{live_server.url}/settings/tokens")
+    page.get_by_label("Name").fill("phone check")
+    page.get_by_role("button", name="Create token").click()
+    expect(page.locator("#tokens")).to_contain_text("phone check")
+
+    page.goto(f"{live_server.url}/catalog")
+    page.get_by_label("New item").fill("Phone-width widget")
+    page.get_by_role("button", name="Create item").click()
+    page.goto(f"{live_server.url}/catalog")
+    page.get_by_role("link", name="Phone-width widget").click()
+    page.get_by_label(re.compile(r"^Unit price")).fill("12.50")
+    page.get_by_role("button", name="Add estimate").click()
+    page.get_by_label("Adjust by").fill("2")
+    page.get_by_label("Reason").fill("stock take, counted on the shelf behind the bench")
+    page.get_by_role("button", name="Record adjustment").click()
+    item_url = page.url
+    expect(page.locator("#estimates")).to_contain_text("12.50")
+    expect(page.locator("#movements")).to_contain_text("+2")
+
+    page.goto(f"{live_server.url}/budget")
+    create = page.get_by_role("button", name="Create plan")
+    if create.is_visible():
+        page.get_by_label(re.compile(r"^Balance \(")).fill("100")
+        create.click()
+    page.get_by_label("Month", exact=True).fill("2027-01")
+    page.get_by_label(re.compile(r"^Amount")).fill("50")
+    page.get_by_label("Label", exact=True).fill("Birthday money from the grandparents")
+    page.get_by_role("button", name="Add override").click()
+    expect(page.locator("#overrides")).to_contain_text("Birthday money")
+
+    page.set_viewport_size({"width": PHONE_WIDTH, "height": 700})
+    for path, table in (
+        (f"{live_server.url}/settings/tokens", "#tokens"),
+        (item_url, "#estimates"),
+        (item_url, "#movements"),
+        (f"{live_server.url}/budget", "#overrides"),
+    ):
+        page.goto(path)
+        width = page.evaluate("() => document.documentElement.scrollWidth")
+        assert width <= PHONE_WIDTH, f"{path} is {width}px wide at {PHONE_WIDTH}px"
+        cell = page.locator(f"{table} tbody td[data-label]").first
+        expect(cell).to_be_visible()
+        box = cell.bounding_box()
+        assert box is not None, table
+        assert box["x"] + box["width"] <= PHONE_WIDTH, table
+    assert errors == []

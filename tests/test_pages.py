@@ -127,6 +127,11 @@ def test_core_journey_through_the_pages(logged_in: TestClient) -> None:
     assert "12.50 USD" in item_page
     assert ">1 each<" in item_page
     assert "stock take" in item_page
+    # Both history tables stack at phone width, each cell labelled from its header.
+    assert '<table id="estimates" class="responsive">' in item_page
+    assert '<td class="num" data-label="Unit price">12.50</td>' in item_page
+    assert '<table id="movements" class="responsive">' in item_page
+    assert '<td class="num" data-label="Change">+1</td>' in item_page
 
     backlog = logged_in.get("/backlog").text
     assert "Bar clamp 600 mm" in backlog

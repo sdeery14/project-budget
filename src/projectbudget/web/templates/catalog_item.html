@@ -63,13 +63,15 @@
       <select id="confidence" name="confidence">{% for c in confidences %}<option value="{{ c.value }}"{% if c.value == "medium" %} selected{% endif %}>{{ c.value }}</option>{% endfor %}</select></div>
     <button type="submit">Add estimate</button>
   </form>
-  <table id="estimates">
+  <table id="estimates" class="responsive">
     <thead><tr><th>As of</th><th class="num">Unit price</th><th>Confidence</th><th>Origin</th></tr></thead>
     <tbody>
       {% for e in estimates %}
       <tr{% if current and e.id == current.id %} class="current"{% endif %}>
-        <td>{{ e.as_of.isoformat() }}{% if current and e.id == current.id %} <span class="badge">current</span>{% endif %}</td>
-        <td class="num">{{ e.price }}</td><td>{{ e.confidence.value }}</td><td>{{ e.origin.value }}</td>
+        <td data-label="As of">{{ e.as_of.isoformat() }}{% if current and e.id == current.id %} <span class="badge">current</span>{% endif %}</td>
+        <td class="num" data-label="Unit price">{{ e.price }}</td>
+        <td data-label="Confidence">{{ e.confidence.value }}</td>
+        <td data-label="Origin">{{ e.origin.value }}</td>
       </tr>
       {% else %}
       <tr><td colspan="4" class="muted">Unpriced. It is counted in the backlog but never summed as zero.</td></tr>
@@ -87,15 +89,15 @@
     <div class="grow"><label for="note">Reason</label><input id="note" name="note" type="text" maxlength="255" placeholder="e.g. stock take"></div>
     <button type="submit">Record adjustment</button>
   </form>
-  <table id="movements">
+  <table id="movements" class="responsive">
     <thead><tr><th>Date</th><th class="num">Change</th><th>Reason</th><th>Note</th></tr></thead>
     <tbody>
       {% for m in movements %}
       <tr>
-        <td>{{ m.occurred_on.isoformat() }}</td>
-        <td class="num">{{ "%+d" | format(m.delta_qty) }}</td>
-        <td>{{ m.reason.value }}{% if m.requirement_id %} <span class="muted">(against a requirement)</span>{% endif %}</td>
-        <td>{{ m.note }}</td>
+        <td data-label="Date">{{ m.occurred_on.isoformat() }}</td>
+        <td class="num" data-label="Change">{{ "%+d" | format(m.delta_qty) }}</td>
+        <td data-label="Reason">{{ m.reason.value }}{% if m.requirement_id %} <span class="muted">(against a requirement)</span>{% endif %}</td>
+        <td data-label="Note">{{ m.note }}</td>
       </tr>
       {% else %}
       <tr><td colspan="4" class="muted">No stock movements yet.</td></tr>

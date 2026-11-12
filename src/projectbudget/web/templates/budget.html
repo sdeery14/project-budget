@@ -57,15 +57,15 @@
       <input id="label" name="label" type="text" maxlength="100" placeholder="e.g. car insurance" required></div>
     <button type="submit">Add override</button>
   </form>
-  <table id="overrides">
+  <table id="overrides" class="responsive">
     <thead><tr><th>Month</th><th class="money">Amount</th><th>Label</th><th></th></tr></thead>
     <tbody>
       {% for o in plan.overrides %}
       <tr>
-        <td>{{ o.month.strftime("%b %Y") }}</td>
-        <td class="money{% if o.delta.is_negative %} neg{% endif %}">{{ o.delta }}</td>
-        <td>{{ o.label }}</td>
-        <td>
+        <td data-label="Month">{{ o.month.strftime("%b %Y") }}</td>
+        <td class="money{% if o.delta.is_negative %} neg{% endif %}" data-label="Amount">{{ o.delta }}</td>
+        <td data-label="Label">{{ o.label }}</td>
+        <td class="actions">
           <form method="post" action="/budget/overrides/{{ o.id }}/delete" class="inline"
                 data-confirm="Remove the {{ o.month.strftime('%b %Y') }} override “{{ o.label }}”?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
