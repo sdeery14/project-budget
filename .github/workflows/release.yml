@@ -87,11 +87,18 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.build.outputs.version }}
             org.opencontainers.image.licenses=Apache-2.0
-      - name: The published image answers /health
+      - name: The published image answers /health with the released version
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
-          docker run -d --name pb -p 8000:8000 "${IMAGE}:${{ needs.build.outputs.version }}"
+          built="$(docker run --rm --entrypoint projectbudget "${IMAGE}:${VERSION}" version)"
+          echo "projectbudget version -> ${built}"
+          test "${built}" = "${VERSION}"
+          docker run -d --name pb -p 8000:8000 "${IMAGE}:${VERSION}"
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8000/health && break; sleep 1; done
-          curl -fsS http://127.0.0.1:8000/health | grep -q '"status":"ok"'
+          health="$(curl -fsS http://127.0.0.1:8000/health)"
+          echo "${health}" | grep -q '"status":"ok"'
+          echo "${health}" | grep -q "\"version\":\"${VERSION}\""
           docker rm -f pb
 
   release:
