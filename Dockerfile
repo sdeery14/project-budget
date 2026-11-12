@@ -18,8 +18,11 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md LICENSE NOTICE ./
 COPY src ./src
+# The cache mount keeps dependency wheels between builds, but it also keeps the project's own
+# built wheel, whose cache key does not include the pretend version: a rebuild with a new VERSION
+# would install the previous one. --reinstall-package rebuilds just this package every time.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-editable
+    uv sync --locked --no-dev --no-editable --reinstall-package projectbudget
 
 # --- runtime: slim Python, non-root, one volume ------------------------------------
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
