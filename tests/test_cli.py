@@ -303,4 +303,3 @@ def test_export_needs_an_owner(migrated_url: str) -> None:
     result = runner.invoke(app, ["--database-url", migrated_url, "export"])
     assert result.exit_code == 1
     assert "projectbudget init" in result.output
-
