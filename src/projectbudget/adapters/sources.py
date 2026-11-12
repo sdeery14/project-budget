@@ -1,7 +1,8 @@
 """Fetch a manifest from one of the three sources (RFC v3 §6, ADR-007).
 
 - Local file or CSV: a path under the configured import directory; revision is
-  the SHA-256 of the content and the estimate date is the file's mtime.
+  the SHA-256 of the content and the estimate date is the file's mtime, as a date in
+  the workspace time zone (#27).
 - GitHub: ``owner/repo`` plus branch and path through the Contents API; revision
   is the latest commit SHA touching the file and the estimate date is that
   commit's date. Only ``api.github.com`` is ever contacted; there is no URL
@@ -23,6 +24,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
+from projectbudget import localtime
 from projectbudget.domain.manifest import DEFAULT_MANIFEST_PATH
 
 GITHUB_API_HOST = "api.github.com"
@@ -98,7 +100,7 @@ def fetch_file(locator: str, import_dir: Path) -> FetchedManifest:
         if target.stat().st_size > MAX_FETCH_BYTES:
             raise SourceFetchError(f"{locator!r} is larger than 2 MB")
         content = target.read_bytes()
-        mtime = datetime.fromtimestamp(target.stat().st_mtime, tz=UTC).date()
+        mtime = localtime.local_date(datetime.fromtimestamp(target.stat().st_mtime, tz=UTC))
     except FileNotFoundError as exc:
         raise SourceFetchError(
             f"No file {locator!r} under the import directory {import_dir}"
@@ -211,7 +213,7 @@ class GitHubClient:
             when = str(head["commit"]["committer"]["date"])
         except (KeyError, TypeError) as exc:
             raise SourceFetchError("Unexpected commit shape from GitHub") from exc
-        as_of = datetime.fromisoformat(when.replace("Z", "+00:00")).astimezone(UTC).date()
+        as_of = localtime.local_date(datetime.fromisoformat(when.replace("Z", "+00:00")))
         contents = self._json(
             f"{GITHUB_API}/repos/{owner_repo}/contents/{quoted_path}?ref={urllib.parse.quote(sha)}",
             token,

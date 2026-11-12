@@ -58,7 +58,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div><label for="price">Unit price ({{ currency }})</label>
       <input id="price" name="price" type="text" inputmode="decimal" placeholder="12.50" required></div>
-    <div><label for="as_of">As of</label><input id="as_of" name="as_of" type="date"></div>
+    <div><label for="as_of">As of</label><input id="as_of" name="as_of" type="date" value="{{ today.isoformat() }}"></div>
     <div><label for="confidence">Confidence</label>
       <select id="confidence" name="confidence">{% for c in confidences %}<option value="{{ c.value }}"{% if c.value == "medium" %} selected{% endif %}>{{ c.value }}</option>{% endfor %}</select></div>
     <button type="submit">Add estimate</button>
@@ -83,7 +83,7 @@
   <form method="post" action="/catalog/{{ item.id }}/adjustments" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div><label for="delta">Adjust by</label><input id="delta" name="delta" type="number" placeholder="+3 or -1" required></div>
-    <div><label for="occurred_on">On</label><input id="occurred_on" name="occurred_on" type="date"></div>
+    <div><label for="occurred_on">On</label><input id="occurred_on" name="occurred_on" type="date" value="{{ today.isoformat() }}"></div>
     <div class="grow"><label for="note">Reason</label><input id="note" name="note" type="text" maxlength="255" placeholder="e.g. stock take"></div>
     <button type="submit">Record adjustment</button>
   </form>

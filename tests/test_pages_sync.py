@@ -3,6 +3,7 @@
 from fastapi.testclient import TestClient
 
 from conftest import csrf_token_from
+from projectbudget import localtime
 from projectbudget.settings import Settings
 
 MANIFEST = """version: 1
@@ -302,7 +303,8 @@ def test_synced_project_page_names_its_source_and_marks_manual_rows(
     page = logged_in.get(f"/projects/{project_id}").text
     assert 'id="synced-from"' in page
     assert f'<a href="/sync/{source_id}">shed.yaml</a>' in page
-    assert "last applied 20" in page  # a date, then the time, in UTC
+    assert "last applied 20" in page  # a date, then the time
+    assert f"({localtime.label()})" in page  # in the workspace time zone, named
     assert "not applied yet" not in page
     assert 'id="manual-note"' in page
     assert "<strong>manual</strong>" in page

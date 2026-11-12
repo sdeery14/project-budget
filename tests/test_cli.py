@@ -303,3 +303,13 @@ def test_export_needs_an_owner(migrated_url: str) -> None:
     result = runner.invoke(app, ["--database-url", migrated_url, "export"])
     assert result.exit_code == 1
     assert "projectbudget init" in result.output
+
+
+def test_a_bad_timezone_setting_stops_the_cli_with_a_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROJECTBUDGET_TIMEZONE", "Mars/Olympus_Mons")
+    result = runner.invoke(app, ["version"])
+    assert result.exit_code == 2, result.output
+    assert "Unknown time zone 'Mars/Olympus_Mons'" in result.output
+    assert "IANA" in result.output

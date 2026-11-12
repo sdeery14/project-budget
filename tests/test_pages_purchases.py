@@ -10,6 +10,7 @@ from conftest import csrf_token_from
 from projectbudget.domain.principal import Principal
 from projectbudget.fixtures.canonical import CanonicalWorkspace, seed_canonical
 from projectbudget.persistence.session import SessionFactory
+from projectbudget.services import clock
 
 AS_OF = date(2026, 11, 1)
 
@@ -170,3 +171,52 @@ def test_data_page_exports_and_imports(
     )
     assert garbage.status_code == 422
     assert "Not JSON" in garbage.text
+
+
+def test_purchases_are_named_by_their_items_and_dates_default_to_today(
+    logged_in: TestClient, canonical: CanonicalWorkspace
+) -> None:
+    """#23: two "Mark purchased" clicks on one day can be told apart; date inputs start at today."""
+    csrf = _csrf(logged_in)
+    today = clock.today().isoformat()
+    form = logged_in.get("/purchases").text
+    assert f'id="ordered_on" name="ordered_on" type="date" value="{today}"' in form
+    item_page = logged_in.get(f"/catalog/{canonical.clamp.id}").text
+    assert f'id="as_of" name="as_of" type="date" value="{today}"' in item_page
+    assert f'id="occurred_on" name="occurred_on" type="date" value="{today}"' in item_page
+
+    created = logged_in.post(
+        "/purchases",
+        data={
+            "csrf_token": csrf,
+            "catalog_item_id": canonical.clamp.id,
+            "qty": "2",
+            "unit_price": "12.50",
+            "status": "ordered",
+            "shipping": "0",
+            "tax": "0",
+        },
+    )
+    purchase_id = created.headers["location"].rsplit("/", 1)[1]
+    page = logged_in.get(f"/purchases/{purchase_id}").text
+    assert "<title>Bar clamp 600 mm, " in page
+    assert "<h1>Bar clamp 600 mm <span" in page
+    assert f'id="purchase-when">Purchase on {today}.</p>' in page
+    assert f'aria-label="Received on" value="{today}"' in page
+    listed = logged_in.get("/purchases").text
+    assert '<td data-label="What"><a href="/purchases/' in listed
+    assert ">Bar clamp 600 mm</a>" in listed
+
+    logged_in.post(
+        f"/purchases/{purchase_id}/lines",
+        data={
+            "csrf_token": csrf,
+            "catalog_item_id": canonical.vise.id,
+            "qty": "1",
+            "unit_price": "90",
+        },
+    )
+    assert ">Bar clamp 600 mm and 1 more</a>" in logged_in.get("/purchases").text
+    assert (
+        "<h1>Bar clamp 600 mm and 1 more <span" in logged_in.get(f"/purchases/{purchase_id}").text
+    )

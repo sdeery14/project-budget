@@ -13,7 +13,7 @@ router = APIRouter(prefix="/forecast", tags=["forecast"], dependencies=[Depends(
 
 @router.get("")
 def get_forecast(request: Request, principal: Owner, today: date | None = None) -> ForecastOut:
-    """The forecast as of ``today`` (default: the real today, UTC). 404 until a plan exists."""
+    """The forecast as of ``today`` (default: today in the workspace time zone). 404 until a plan exists."""
     result = forecast.get_forecast(session_factory(request), principal, today=today)
     if result is None:
         raise HTTPException(status_code=404, detail="No budget plan yet; set one at /budget")

@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from projectbudget import __version__
+from projectbudget import __version__, localtime
 from projectbudget.api.router import router as api_router
 from projectbudget.persistence.engine import make_engine
 from projectbudget.persistence.session import make_session_factory
@@ -35,6 +35,7 @@ from projectbudget.web.templates import STATIC_DIR
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the FastAPI application with its engine attached to ``app.state``."""
     resolved = settings or Settings()
+    localtime.configure(resolved.timezone)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
