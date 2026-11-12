@@ -6,6 +6,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Added
 
+- A favicon: the tab has an icon and the browser console no longer logs a 404 for `/favicon.ico` on every page (#16).
 - An Account page (`/settings/account`) to change the owner's password with the current one, signing every other session out, and a `projectbudget passwd` command on the host for a forgotten password (#12). Neither is reachable with an API token.
 - `PROJECTBUDGET_GITHUB_TOKEN`: one read-only token for every private GitHub sync source, read from the environment or `.env` and never stored; a source's own token variable overrides it. The operations guide has the fine-grained token recipe and where the token goes for `uvx`, Docker and Compose (#30).
 - A source's branch, path, token variable and CSV project id can be changed on the source page and with `PATCH /api/v1/sync/sources/{id}`; the source page says which token it will use (#29, #31).
@@ -19,6 +20,9 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Fixed
 
+- A synced project's page now says which source it follows, when that source was last applied and at which revision, with a link to the source page; its Add a requirement form warns that hand-added rows stay manual, and such rows carry a "manual" badge. The requirement API gains `source_id` for the same distinction (#35).
+- An exclusive reusable item now gets an "exclusive" chip on the backlog beside the existing "shared" one, and the project page's Sharing column always shows the stored value, greyed out for consumables with a note that sharing only matters for reusable items (#19).
+- The timeline chart has a caption explaining that the optimistic balance can sit below the conservative one in a month when it affords a purchase sooner, and hovering a purchase bar lists the items bought that month (#22).
 - The backlog's empty state on a fresh workspace says that no project has requirements yet and links to Projects, instead of claiming every requirement is covered by stock; when requirements exist but all are paused, cancelled or archived it says so (#20).
 - The timeline no longer shows a red negative "opening balance" or says "blocked" when the only shortfall is the protected reserve and this month's contribution covers it. The first tile is now what is spendable (floored at zero) beside the reserve, the balance basis is one line under the tiles, "blocked" means the first month still cannot buy after its contribution, and the budget page says the contribution is counted in full this month and how to offset one that is already in the balance, with a negative current-month override (#21).
 - A sync reject for a kind or unit the manifest may not change now names the actual reason (confirmed, merged, created by hand, or used by a requirement, purchase, stock or price), links the catalog item and states the two ways out; when every reject shares one cause the preview says so once above the table (#28).

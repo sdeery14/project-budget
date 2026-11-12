@@ -135,6 +135,52 @@ def test_core_journey_through_the_pages(logged_in: TestClient) -> None:
     assert "shared" in backlog
 
 
+def test_exclusive_and_consumable_sharing_are_both_shown(logged_in: TestClient) -> None:
+    """#19: exclusive is a deliberate choice, not "unspecified"; consumables show it greyed out."""
+    csrf = _csrf(logged_in)
+    project_id = _location_id(
+        logged_in.post("/projects", data={"csrf_token": csrf, "name": "Shed"})
+    )
+    vise = logged_in.post(
+        "/catalog",
+        data={"csrf_token": csrf, "name": "Bench vise", "kind": "reusable", "unit": "each"},
+    )
+    vise_id = _location_id(vise)
+    for item, sharing in ((vise_id, "exclusive"), ("", "shared")):
+        added = logged_in.post(
+            f"/projects/{project_id}/requirements",
+            data={
+                "csrf_token": csrf,
+                "catalog_item_id": item,
+                "item_text": "" if item else "Wood glue",
+                "qty": "1",
+                "sharing": sharing,
+            },
+        )
+        assert added.status_code == 303, added.text
+
+    detail = logged_in.get(f"/projects/{project_id}").text
+    assert 'data-label="Sharing">exclusive</td>' in detail
+    assert "—" not in detail.split('id="requirements"')[1]
+    assert (
+        'title="Sharing only matters for reusable items; a consumable is used up">shared</span>'
+        in detail
+    )
+    assert 'id="sharing-note"' in detail
+    assert "manual</span>" not in detail  # not a synced project: no manual badge
+
+    # Priced, so the vise sits in the main table (the unpriced bucket shows no sharing chips).
+    priced = logged_in.post(
+        f"/catalog/{vise_id}/estimates",
+        data={"csrf_token": csrf, "price": "99.00", "as_of": "2026-11-01", "confidence": "high"},
+    )
+    assert priced.status_code == 303, priced.text
+    backlog = logged_in.get("/backlog").text
+    vise_row = backlog.split(f'href="/catalog/{vise_id}"')[1].split("</tr>")[0]
+    assert ">exclusive</span>" in vise_row
+    assert ">shared</span>" not in vise_row
+
+
 def test_form_errors_re_render_the_page_with_422(logged_in: TestClient) -> None:
     csrf = _csrf(logged_in)
     blank = logged_in.post("/projects", data={"csrf_token": csrf, "name": "   "})

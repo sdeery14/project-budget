@@ -60,9 +60,14 @@
             data-conservative='{{ chart.conservative }}'
             data-optimistic='{{ chart.optimistic }}'
             data-purchases='{{ chart.purchases }}'
+            data-purchase-items='{{ chart.purchase_items }}'
             data-currency="{{ chart.currency }}"
             aria-label="Closing balance per month, optimistic and conservative"></canvas>
   </div>
+  <p class="muted" id="chart-caption">Lines are the closing balance each month. Optimistic uses list prices;
+  conservative adds the {{ c.contingency_pct }} % contingency. The optimistic balance can sit <em>below</em> the
+  conservative one in a month when it affords a purchase sooner. Bars are that month's conservative purchases;
+  hover one for the items.</p>
 
   <h2>Items</h2>
   <div class="table-wrap">

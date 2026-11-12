@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from projectbudget.domain.catalog import Intent, ItemKind, Sharing
 from projectbudget.domain.principal import Principal
-from projectbudget.services import catalog, inventory, projects, requirements
+from projectbudget.services import catalog, inventory, projects, requirements, sync
 from projectbudget.services.catalog import CatalogItemInfo
 from projectbudget.services.errors import USER_ERRORS
 from projectbudget.services.requirements import RequirementInfo
@@ -31,6 +31,13 @@ class RequirementRow:
     item: CatalogItemInfo
     consumed: int
     on_hand: int
+    project_synced: bool = False
+    """Whether the project follows a sync source; decides the "manual" badge (#35)."""
+
+    @property
+    def manual(self) -> bool:
+        """Entered by hand on a synced project: the manifest does not know this row (ADR-012)."""
+        return self.project_synced and self.requirement.source_id is None
 
     @property
     def remaining(self) -> int:
@@ -50,13 +57,18 @@ class RequirementRow:
         )
 
 
-def _row(request: Request, principal: Principal, info: RequirementInfo) -> RequirementRow:
+def _row(
+    request: Request, principal: Principal, info: RequirementInfo, *, synced: bool | None = None
+) -> RequirementRow:
     factory = session_factory(request)
+    if synced is None:
+        synced = projects.get_project(factory, principal, info.project_id).source_id is not None
     return RequirementRow(
         requirement=info,
         item=catalog.get_item(factory, principal, info.catalog_item_id),
         consumed=inventory.consumed(factory, principal, info.id),
         on_hand=inventory.on_hand(factory, principal, info.catalog_item_id),
+        project_synced=synced,
     )
 
 
@@ -71,9 +83,16 @@ def _detail_context(
     factory = session_factory(request)
     project = projects.get_project(factory, principal, project_id)
     infos = requirements.list_requirements(factory, principal, project_id, include_inactive=True)
+    source_id = project.source_id
+    source = last_applied = None
+    if source_id is not None:
+        source = sync.get_source(factory, principal, source_id)
+        last_applied = sync.last_applied_run(factory, principal, source_id)
     return {
         "project": project,
-        "rows": [_row(request, principal, info) for info in infos],
+        "source": source,
+        "last_applied": last_applied,
+        "rows": [_row(request, principal, info, synced=source is not None) for info in infos],
         "items": catalog.list_items(factory, principal),
         "intents": list(Intent),
         **extra,

@@ -27,7 +27,8 @@
       <td data-label="Item">
         <span><a href="/catalog/{{ row.item.id }}">{{ row.item.name }}</a>
         <span class="badge">{{ row.item.kind.value }}</span>
-        {% if row.shared %}<span class="badge" title="Shared reusable item: counted once at the largest single demand">shared</span>{% endif %}
+        {% if row.shared %}<span class="badge" title="Shared reusable item: counted once at the largest single demand">shared</span>
+        {%- elif row.item.kind.value == "reusable" %} <span class="badge" title="Exclusive reusable item: each project's demand is added up">exclusive</span>{% endif %}
         {% if row.fully_ordered %}<span class="badge ok" title="Every missing unit is on order; the row stays until it is received">on order</span>{% endif %}</span>
       </td>
       <td data-label="Priority"><span class="badge p{{ row.priority }}">P{{ row.priority }}</span></td>

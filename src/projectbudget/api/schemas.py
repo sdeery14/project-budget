@@ -250,6 +250,10 @@ class RequirementOut(BaseModel):
     notes: str
     created_at: datetime
     updated_at: datetime
+    source_id: str | None = Field(
+        default=None,
+        description="The sync source that manages this requirement; null when entered by hand.",
+    )
 
     @classmethod
     def of(cls, info: RequirementInfo) -> "RequirementOut":
@@ -266,6 +270,7 @@ class RequirementOut(BaseModel):
             notes=info.notes,
             created_at=info.created_at,
             updated_at=info.updated_at,
+            source_id=info.source_id,
         )
 
 

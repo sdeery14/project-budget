@@ -63,6 +63,8 @@ class RequirementInfo:
     notes: str
     created_at: datetime
     updated_at: datetime
+    source_id: str | None = None
+    """The sync source that manages this row; None when it was entered by hand (ADR-007)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +106,7 @@ def _info(row: Requirement) -> RequirementInfo:
         notes=row.notes,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        source_id=row.source_id,
     )
 
 

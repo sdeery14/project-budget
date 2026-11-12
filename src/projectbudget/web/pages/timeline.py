@@ -40,6 +40,9 @@ def _chart_data(result: Forecast) -> dict[str, str]:
         "purchases": json.dumps(
             [str(month.purchases_total) for month in result.conservative.months]
         ),
+        "purchase_items": json.dumps(
+            [[p.item.name for p in month.purchases] for month in result.conservative.months]
+        ),
         "currency": result.plan.currency,
     }
 

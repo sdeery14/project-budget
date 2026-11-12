@@ -400,6 +400,21 @@ def list_runs(
         return [_run_info(row) for row in rows]
 
 
+def last_applied_run(
+    session_factory: SessionFactory, principal: Principal, source_id: str
+) -> RunInfo | None:
+    """The newest run that applied a plan, or None before the first apply (#35)."""
+    with session_factory() as db:
+        _load_source(db, source_id)
+        row = db.scalars(
+            select(SyncRun)
+            .where(SyncRun.source_id == source_id, SyncRun.status == RunStatus.APPLIED.value)
+            .order_by(SyncRun.created_at.desc(), SyncRun.id)
+            .limit(1)
+        ).first()
+        return _run_info(row) if row is not None else None
+
+
 # --- fetch and parse --------------------------------------------------------------------------
 
 

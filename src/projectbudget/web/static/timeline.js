@@ -18,6 +18,12 @@
       return;
     }
     var labels = JSON.parse(canvas.getAttribute("data-labels") || "[]");
+    var purchaseItems = [];
+    try {
+      purchaseItems = JSON.parse(canvas.getAttribute("data-purchase-items") || "[]");
+    } catch (err) {
+      purchaseItems = [];
+    }
     var currency = canvas.getAttribute("data-currency") || "";
     var styles = getComputedStyle(document.documentElement);
     var accent = styles.getPropertyValue("--accent").trim() || "#1f6feb";
@@ -78,7 +84,18 @@
           tooltip: {
             callbacks: {
               label: function (ctx) {
-                return ctx.dataset.label + ": " + Number(ctx.parsed.y).toFixed(2) + " " + currency;
+                var text = ctx.dataset.label + ": " + Number(ctx.parsed.y).toFixed(2) + " " + currency;
+                if (ctx.dataset.type === "bar") {
+                  var names = purchaseItems[ctx.dataIndex] || [];
+                  text += " (" + names.length + (names.length === 1 ? " item)" : " items)");
+                }
+                return text;
+              },
+              afterLabel: function (ctx) {
+                if (ctx.dataset.type !== "bar") {
+                  return "";
+                }
+                return (purchaseItems[ctx.dataIndex] || []).join(", ");
               }
             }
           }

@@ -265,3 +265,72 @@ def test_add_source_validation_renders_the_error(logged_in: TestClient) -> None:
     )
     assert csv_without_project.status_code == 422
     assert "external project id" in csv_without_project.text
+
+
+def _apply_file_source(client: TestClient, manifest: str, name: str = "shed.yaml") -> str:
+    """Create a file source, preview and apply it; return the source id."""
+    csrf = _csrf(client)
+    (_import_dir(client) / name).write_text(manifest, encoding="utf-8")
+    created = client.post("/sync", data={"csrf_token": csrf, "kind": "file", "locator": name})
+    source_id = created.headers["location"].rsplit("/", 1)[1]
+    shown = client.post(f"/sync/{source_id}/preview", data={"csrf_token": csrf}).text
+    applied = client.post(
+        f"/sync/{source_id}/apply",
+        data={
+            "csrf_token": csrf,
+            "expected_content_hash": shown.split('name="expected_content_hash" value="')[1].split(
+                '"'
+            )[0],
+            "expected_plan_digest": shown.split('name="expected_plan_digest" value="')[1].split(
+                '"'
+            )[0],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    return source_id
+
+
+def test_synced_project_page_names_its_source_and_marks_manual_rows(
+    logged_in: TestClient,
+) -> None:
+    """#35: the project says where it comes from, when it was applied, and what stays manual."""
+    csrf = _csrf(logged_in)
+    source_id = _apply_file_source(logged_in, MANIFEST)
+    sync_page = logged_in.get("/sync").text
+    project_id = sync_page.split('href="/projects/')[1].split('"')[0]
+
+    page = logged_in.get(f"/projects/{project_id}").text
+    assert 'id="synced-from"' in page
+    assert f'<a href="/sync/{source_id}">shed.yaml</a>' in page
+    assert "last applied 20" in page  # a date, then the time, in UTC
+    assert "not applied yet" not in page
+    assert 'id="manual-note"' in page
+    assert "<strong>manual</strong>" in page
+    assert "manual</span>" not in page  # every row so far comes from the manifest
+
+    # A hand-added row on a synced project is badged, the manifest's rows are not.
+    added = logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "item_text": "Tape measure", "qty": "1"},
+    )
+    assert added.status_code == 303, added.text
+    page = logged_in.get(f"/projects/{project_id}").text
+    rows = page.split('id="requirements"')[1].split("<tr id=")[1:]
+    badged = [row for row in rows if "manual</span>" in row]
+    assert len(badged) == 1
+    assert "Tape measure" in badged[0]
+    # The HTMX row swap renders the same badge.
+    requirement_id = badged[0].split('"')[1].removeprefix("requirement-")
+    swapped = logged_in.post(
+        f"/requirements/{requirement_id}/intent",
+        data={"csrf_token": csrf, "intent": "paused"},
+        headers={"HX-Request": "true"},
+    )
+    assert swapped.status_code == 200
+    assert "manual</span>" in swapped.text
+
+    # A project built by hand says none of this.
+    manual_project = logged_in.post("/projects", data={"csrf_token": csrf, "name": "By hand"})
+    manual_page = logged_in.get(manual_project.headers["location"]).text
+    assert 'id="synced-from"' not in manual_page
+    assert 'id="manual-note"' not in manual_page

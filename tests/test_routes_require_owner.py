@@ -1,4 +1,4 @@
-"""Every route except health, login and static requires the owner (ADR-005).
+"""Every route except health, the favicon, login and static requires the owner (ADR-005).
 
 Two proofs: the route table declares the dependency (on the route itself or on
 a router it was included through), and the wire behaviour is 401 or 403 for an
@@ -20,7 +20,7 @@ from starlette.routing import Mount
 from projectbudget.services import auth
 from projectbudget.web.auth import SESSION_COOKIE, require_owner
 
-EXEMPT = {("/health", "GET"), ("/login", "GET"), ("/login", "POST")}
+EXEMPT = {("/health", "GET"), ("/favicon.ico", "GET"), ("/login", "GET"), ("/login", "POST")}
 PATH_PARAM = re.compile(r"\{[^}]+\}")
 NIL_UUID = "00000000-0000-0000-0000-000000000000"
 
