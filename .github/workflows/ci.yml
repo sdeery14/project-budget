@@ -20,10 +20,10 @@ jobs:
     name: Lint and types
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # hatch-vcs reads tags for the version
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --group dev --group e2e # mypy checks tests/e2e too
@@ -37,10 +37,10 @@ jobs:
     env:
       PROJECTBUDGET_TEST_DATABASE_URL: sqlite+pysqlite:///./test.sqlite
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --group dev
@@ -66,10 +66,10 @@ jobs:
     env:
       PROJECTBUDGET_TEST_DATABASE_URL: postgresql+psycopg://projectbudget:projectbudget@localhost:5432/projectbudget_test
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --group dev
@@ -79,10 +79,10 @@ jobs:
     name: UI smoke (Playwright)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --group dev --group e2e
@@ -98,7 +98,7 @@ jobs:
         run: uv run pytest tests/e2e --browser chromium --screenshot only-on-failure --output e2e-artifacts
       - name: Upload screenshots of failures
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-screenshots
           path: e2e-artifacts
@@ -111,7 +111,7 @@ jobs:
       VERSION: 0.0.0.dev0
       NEXT_VERSION: 0.0.0.dev1
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Build image
         run: docker build --build-arg "VERSION=${VERSION}" -t projectbudget:ci .
       - name: The image carries the version it was built with
@@ -147,14 +147,14 @@ jobs:
     name: Security scans
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # gitleaks scans the whole history
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --group dev
