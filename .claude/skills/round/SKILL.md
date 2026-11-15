@@ -33,7 +33,7 @@ These are not judgment calls. Breaking one ends the round for that issue, with a
 
 1. `git checkout main && git pull`; the tree must be clean. `gh auth status` must succeed.
 2. `gh label create needs-human --color D93F0B --description "Round stopped here; the owner decides" || true`
-3. List the work: `gh issue list --milestone "<milestone>" --state open --json number,title,labels,body`.
+3. List the work: `gh issue list --milestone "<milestone>" --state open --limit 500 --json number,title,labels,body`.
    Skip issues labelled `needs-human` or `question`. Honour `--only`. Work in ascending
    issue number unless the milestone description gives an order.
 4. For each issue read the full body and comments, and the ADR it concerns. If the issue is
