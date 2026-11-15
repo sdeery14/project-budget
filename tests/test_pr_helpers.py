@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -108,12 +109,76 @@ def test_ci_verdict_needs_every_required_check_and_fails_fast() -> None:
 
 
 def with_comments(monkeypatch: pytest.MonkeyPatch, comments: list[dict[str, Any]]) -> None:
+    monkeypatch.setattr(pr_wait, "issue_comments", lambda number: comments)
+
+
+def test_issue_comments_follow_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Codex answer posted after the hundredth comment must still be seen."""
+    pages = {
+        1: [{"id": i} for i in range(100)],
+        2: [{"id": i} for i in range(100, 200)],
+        3: [{"id": 200}],
+    }
+    asked: list[str] = []
+
     def fake_gh(*args: str) -> Any:
-        assert args[0] == "api"
-        assert "/issues/64/comments" in args[1]
-        return comments
+        asked.append(args[1])
+        page = int(args[1].rsplit("page=", 1)[1])
+        return pages.get(page, [])
 
     monkeypatch.setattr(pr_wait, "gh", fake_gh)
+    comments = pr_wait.issue_comments(64)
+    assert [c["id"] for c in comments] == list(range(201))
+    assert len(asked) == 3
+    assert all("/issues/64/comments?per_page=100&page=" in url for url in asked)
+
+
+def test_head_arrival_is_the_first_check_run_not_the_commit_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answers = {
+        f"repos/{{owner}}/{{repo}}/commits/{HEAD}/check-runs?per_page=100": {
+            "check_runs": [
+                {"name": "Tests", "started_at": "2026-11-15T19:13:05Z"},
+                {"name": "Lint", "started_at": "2026-11-15T19:13:04Z"},
+                {"name": "Queued", "started_at": None},
+            ]
+        }
+    }
+    monkeypatch.setattr(pr_wait, "gh", lambda *args: answers[args[1]])
+    assert pr_wait.head_arrived_at(HEAD) == "2026-11-15T19:13:04Z"
+
+
+def test_head_arrival_falls_back_to_statuses_then_to_now(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers: dict[str, Any] = {
+        f"repos/{{owner}}/{{repo}}/commits/{HEAD}/check-runs?per_page=100": {"check_runs": []},
+        f"repos/{{owner}}/{{repo}}/commits/{HEAD}/status": {
+            "statuses": [{"created_at": "2026-11-15T19:13:30Z"}]
+        },
+    }
+    monkeypatch.setattr(pr_wait, "gh", lambda *args: answers[args[1]])
+    assert pr_wait.head_arrived_at(HEAD) == "2026-11-15T19:13:30Z"
+
+    answers[f"repos/{{owner}}/{{repo}}/commits/{HEAD}/status"] = {"statuses": []}
+    before = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    arrived = pr_wait.head_arrived_at(HEAD)
+    assert arrived >= before  # nothing posted before now can be about a push with no checks yet
+
+
+def test_a_notice_between_commit_and_push_is_about_the_old_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Committed 19:00, Codex notice about the old head 19:05, pushed 19:10."""
+    with_comments(
+        monkeypatch,
+        [
+            state_comment(OLD, findings=True, created_at="2026-11-15T18:50:00Z"),
+            codex_comment(NOTICE, "2026-11-15T19:05:00Z"),
+        ],
+    )
+    state = pr_wait.codex_state(64, HEAD, "2026-11-15T19:10:00Z")
+    assert state is not None
+    assert state["commit_sha"] == OLD  # the old review stands; the notice is not about HEAD
 
 
 def test_state_block_for_the_head_commit_is_read(monkeypatch: pytest.MonkeyPatch) -> None:

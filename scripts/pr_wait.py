@@ -19,6 +19,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 CODEX_LOGIN = "chatgpt-codex-connector[bot]"
@@ -69,24 +70,60 @@ def ci_verdict(states: dict[str, str], required: list[str]) -> str:
     return "pending"
 
 
-def codex_state(number: int, head: str, head_pushed_at: str) -> dict[str, Any] | None:
+def issue_comments(number: int) -> list[dict[str, Any]]:
+    """Every comment on the PR, oldest first, following the pages to the end."""
+    comments: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        batch = gh(
+            "api", f"repos/{{owner}}/{{repo}}/issues/{number}/comments?per_page=100&page={page}"
+        )
+        comments.extend(batch or [])
+        if not batch or len(batch) < 100:
+            return comments
+        page += 1
+
+
+def head_arrived_at(head: str) -> str:
+    """When the head commit reached GitHub: the start of its first check run.
+
+    A commit's own dates say when it was made, not when it was pushed, and a notice Codex
+    posted between the two is about the previous head. Check runs start within seconds of
+    a push, so their earliest start is the boundary; with none yet, the push is happening
+    now and nothing posted so far can be about it.
+    """
+    runs = gh("api", f"repos/{{owner}}/{{repo}}/commits/{head}/check-runs?per_page=100") or {}
+    started: list[str] = [
+        str(run["started_at"]) for run in runs.get("check_runs") or [] if run.get("started_at")
+    ]
+    if not started:
+        status = gh("api", f"repos/{{owner}}/{{repo}}/commits/{head}/status") or {}
+        started = [
+            str(s["created_at"]) for s in status.get("statuses") or [] if s.get("created_at")
+        ]
+    if not started:
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return min(started)
+
+
+def codex_state(number: int, head: str, head_arrived: str) -> dict[str, Any] | None:
     """The Codex response that applies to the PR now, or ``None`` before the first one.
 
     Comments are read oldest first. A review-state block always wins over what came before
     it. A notice without a state block ("create an environment for this repo", a quota
-    message) counts only when it is newer than the head commit, and it supersedes a state
-    that was about an earlier commit: that notice is Codex's answer to the current push.
+    message) counts only when it is newer than the head's arrival on GitHub, and it then
+    supersedes a state that was about an earlier commit: that notice is Codex's answer to
+    the current push. A state for the head itself is never undone by a later notice.
     """
-    comments = gh("api", f"repos/{{owner}}/{{repo}}/issues/{number}/comments?per_page=100") or []
     latest: dict[str, Any] | None = None
-    for comment in comments:
+    for comment in issue_comments(number):
         if comment.get("user", {}).get("login") != CODEX_LOGIN:
             continue
         body = comment.get("body") or ""
         match = STATE_BLOCK.search(body)
         if match:
             latest = json.loads(match.group(1)).get("code_review")
-        elif comment.get("created_at", "") >= head_pushed_at and (
+        elif comment.get("created_at", "") >= head_arrived and (
             latest is None or latest.get("commit_sha") != head
         ):
             latest = {"status": "error", "message": body.strip()[:300]}
@@ -99,12 +136,11 @@ def snapshot(number: int, required: list[str]) -> dict[str, Any]:
         "view",
         str(number),
         "--json",
-        "headRefOid,state,mergedAt,isDraft,mergeStateStatus,statusCheckRollup,commits",
+        "headRefOid,state,mergedAt,isDraft,mergeStateStatus,statusCheckRollup",
     )
     states = check_states(pr.get("statusCheckRollup") or [])
     head = pr["headRefOid"]
-    head_pushed_at = max((c.get("committedDate", "") for c in pr.get("commits") or []), default="")
-    review = codex_state(number, head, head_pushed_at)
+    review = codex_state(number, head, head_arrived_at(head))
     codex: dict[str, Any] | None = None
     if review is not None:
         codex = {
