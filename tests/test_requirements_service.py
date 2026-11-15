@@ -14,7 +14,7 @@ from projectbudget.domain.catalog import (
 )
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import catalog, projects, requirements
+from projectbudget.services import catalog, inventory, projects, requirements
 from projectbudget.services.guards import ReadOnlyPrincipalError
 from projectbudget.services.projects import ProjectInfo
 
@@ -249,3 +249,38 @@ def test_read_only_principals_cannot_write(
     assert requirements.list_requirements(session_factory, read_only_principal, project.id) == [
         created
     ]
+
+
+def test_quantity_never_drops_below_what_was_consumed(
+    session_factory: SessionFactory, principal: Principal, project: ProjectInfo
+) -> None:
+    """#14: editing the quantity in place must not orphan consumption already recorded."""
+    created = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=4, item_text="Hinge"),
+    )
+    inventory.adjust(session_factory, principal, created.catalog_item_id, 3, note="found")
+    inventory.consume(session_factory, principal, created.id, 2)
+
+    with pytest.raises(requirements.QuantityBelowConsumedError) as refused:
+        requirements.update_requirement(
+            session_factory, principal, created.id, requirements.RequirementUpdate(qty=1)
+        )
+    assert refused.value.consumed == 2
+    assert "2 already consumed" in str(refused.value)
+    assert requirements.get_requirement(session_factory, principal, created.id).qty == 4
+
+    # Down to exactly what was used is fine, and so is any other field on its own.
+    trimmed = requirements.update_requirement(
+        session_factory,
+        principal,
+        created.id,
+        requirements.RequirementUpdate(qty=2, priority=1, sharing=Sharing.EXCLUSIVE, notes=" x "),
+    )
+    assert (trimmed.qty, trimmed.priority, trimmed.sharing, trimmed.notes) == (
+        2,
+        1,
+        Sharing.EXCLUSIVE,
+        "x",
+    )

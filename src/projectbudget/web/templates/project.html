@@ -12,11 +12,28 @@
     on the source page to bring in its changes.</p>
   {% endif %}
   <p><a href="/projects">All projects</a> · <a href="/backlog">Backlog</a></p>
-  <form method="post" action="/projects/{{ project.id }}/archive" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="archived" value="{{ 'false' if project.archived else 'true' }}">
-    <button type="submit" class="secondary small">{{ "Restore project" if project.archived else "Archive project" }}</button>
-  </form>
+  <div class="actions">
+    <details class="edit" id="edit-project"{% if project_error %} open{% endif %}>
+      <summary>{{ "Edit notes" if source else "Edit name and notes" }}</summary>
+      {% if project_error %}<p class="alert error" role="alert">{{ project_error }}</p>{% endif %}
+      <form method="post" action="/projects/{{ project.id }}" class="row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if not source %}
+        <div class="grow"><label for="project_name">Name</label>
+          <input id="project_name" name="name" type="text" maxlength="200" value="{{ project.name }}" required></div>
+        {% endif %}
+        <div class="grow"><label for="project_notes">Notes</label>
+          <input id="project_notes" name="notes" type="text" maxlength="2000" value="{{ project.notes }}" placeholder="optional"></div>
+        <button type="submit">Save</button>
+      </form>
+      {% if source %}<p class="muted">The manifest sets a synced project's name; change it there.</p>{% endif %}
+    </details>
+    <form method="post" action="/projects/{{ project.id }}/archive" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="archived" value="{{ 'false' if project.archived else 'true' }}">
+      <button type="submit" class="secondary small">{{ "Restore project" if project.archived else "Archive project" }}</button>
+    </form>
+  </div>
 </section>
 
 <section class="card">
