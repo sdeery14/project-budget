@@ -69,7 +69,7 @@ def ci_verdict(states: dict[str, str], required: list[str]) -> str:
     return "pending"
 
 
-def codex_state(number: int) -> dict[str, Any] | None:
+def codex_state(number: int, head_pushed_at: str) -> dict[str, Any] | None:
     """The latest Codex code-review state on the PR, or ``None`` before the first one."""
     comments = gh("api", f"repos/{{owner}}/{{repo}}/issues/{number}/comments?per_page=100") or []
     latest: dict[str, Any] | None = None
@@ -80,9 +80,10 @@ def codex_state(number: int) -> dict[str, Any] | None:
         match = STATE_BLOCK.search(body)
         if match:
             latest = json.loads(match.group(1)).get("code_review")
-        elif latest is None:
+        elif latest is None and comment.get("created_at", "") >= head_pushed_at:
             # Codex answered without reviewing ("create an environment for this repo", a
             # quota notice): report it instead of waiting for a review that will not come.
+            # A notice older than the head commit was about an earlier push; ignore it.
             latest = {"status": "error", "message": body.strip()[:300]}
     return latest
 
@@ -93,10 +94,11 @@ def snapshot(number: int, required: list[str]) -> dict[str, Any]:
         "view",
         str(number),
         "--json",
-        "headRefOid,state,mergedAt,isDraft,mergeStateStatus,statusCheckRollup",
+        "headRefOid,state,mergedAt,isDraft,mergeStateStatus,statusCheckRollup,commits",
     )
     states = check_states(pr.get("statusCheckRollup") or [])
-    review = codex_state(number)
+    head_pushed_at = max((c.get("committedDate", "") for c in pr.get("commits") or []), default="")
+    review = codex_state(number, head_pushed_at)
     head = pr["headRefOid"]
     codex: dict[str, Any] | None = None
     if review is not None:
