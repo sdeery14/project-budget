@@ -284,3 +284,41 @@ def test_quantity_never_drops_below_what_was_consumed(
         Sharing.EXCLUSIVE,
         "x",
     )
+
+
+def test_free_text_can_create_a_reusable_item_but_never_changes_an_existing_one(
+    session_factory: SessionFactory, principal: Principal, project: ProjectInfo
+) -> None:
+    """#18: a list of tools is typed in once, each as reusable, without a trip to its page."""
+    created = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(
+            project_id=project.id, qty=1, item_text="Torque wrench", kind=ItemKind.REUSABLE
+        ),
+    )
+    wrench = catalog.get_item(session_factory, principal, created.catalog_item_id)
+    assert wrench.kind is ItemKind.REUSABLE
+    assert wrench.review_state is ReviewState.UNREVIEWED
+
+    # The same text again with another kind resolves to the existing item unchanged.
+    again = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(
+            project_id=project.id, qty=1, item_text="torque wrench", kind=ItemKind.CONSUMABLE
+        ),
+    )
+    assert again.catalog_item_id == wrench.id
+    assert catalog.get_item(session_factory, principal, wrench.id).kind is ItemKind.REUSABLE
+
+    # Choosing by id ignores the kind entirely.
+    chosen = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(
+            project_id=project.id, qty=1, catalog_item_id=wrench.id, kind=ItemKind.CONSUMABLE
+        ),
+    )
+    assert chosen.catalog_item_id == wrench.id
+    assert len(catalog.list_items(session_factory, principal)) == 1

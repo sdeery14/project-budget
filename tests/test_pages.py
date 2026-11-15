@@ -449,3 +449,47 @@ def test_project_and_requirement_edit_forms(logged_in: TestClient) -> None:
     assert plain.status_code == 303
     assert plain.headers["location"] == f"/projects/{project_id}"
     assert "2 each" in logged_in.get(f"/projects/{project_id}").text
+
+
+def test_requirement_form_sets_the_kind_of_a_new_item(logged_in: TestClient) -> None:
+    """#18: seven tools on one list no longer mean seven item pages to make them reusable."""
+    csrf = _csrf(logged_in)
+    project_id = _location_id(
+        logged_in.post("/projects", data={"csrf_token": csrf, "name": "Garage"})
+    )
+    page = logged_in.get(f"/projects/{project_id}").text
+    assert '<select id="kind" name="kind">' in page
+    assert "creates an unreviewed item with the unit and kind" in page
+
+    added = logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "item_text": "Chain whip", "qty": "1", "kind": "reusable"},
+    )
+    assert added.status_code == 303, added.text
+    row = logged_in.get(f"/projects/{project_id}").text.split('id="requirements"')[1]
+    assert "Chain whip" in row
+    assert '<span class="badge">reusable</span>' in row
+
+    # Without the field the default is still a consumable, and an existing item keeps its kind.
+    plain = logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "item_text": "Chain lube", "qty": "1"},
+    )
+    assert plain.status_code == 303, plain.text
+    repeat = logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "item_text": "chain whip", "qty": "1", "kind": "consumable"},
+    )
+    assert repeat.status_code == 303, repeat.text
+    items = {item["name"]: item["kind"] for item in logged_in.get("/api/v1/catalog/items").json()}
+    assert items == {"Chain whip": "reusable", "Chain lube": "consumable"}
+
+    # The JSON twin takes the same field.
+    via_api = logged_in.post(
+        "/api/v1/requirements",
+        json={"project_id": project_id, "qty": 1, "item_text": "Cassette tool", "kind": "reusable"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert via_api.status_code == 201, via_api.text
+    tool = logged_in.get(f"/api/v1/catalog/items/{via_api.json()['catalog_item_id']}").json()
+    assert tool["kind"] == "reusable"

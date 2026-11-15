@@ -13,6 +13,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 - `PROJECTBUDGET_GITHUB_TOKEN`: one read-only token for every private GitHub sync source, read from the environment or `.env` and never stored; a source's own token variable overrides it. The operations guide has the fine-grained token recipe and where the token goes for `uvx`, Docker and Compose (#30).
 - A source's branch, path, token variable and CSV project id can be changed on the source page and with `PATCH /api/v1/sync/sources/{id}`; the source page says which token it will use (#29, #31).
 - A sync source can be attached to an existing project (chosen on the Add source form or with `project_id` on the API). On the first apply, hand-entered requirements whose catalog item the manifest also names are adopted, keeping intent, sharing, notes and consumption; the plan lists adoptions as their own action and warns when a source with no project chosen would create a second project with the same name (#26, ADR-012).
+- The Add a requirement form has a Kind field (consumable or reusable), and `POST /api/v1/requirements` takes `kind`, used only when the typed name creates a new catalog item; a list of tools no longer needs a trip to each item page to make it reusable (#18).
 - Browser smoke tests (`tests/e2e`, Playwright, Chromium) that sign in, run the core journey, check destructive buttons ask first and fail on console errors, at desktop and phone width; CI runs them as "UI smoke (Playwright)".
 
 ### Changed
