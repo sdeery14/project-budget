@@ -76,9 +76,14 @@ def codex_state(number: int) -> dict[str, Any] | None:
     for comment in comments:
         if comment.get("user", {}).get("login") != CODEX_LOGIN:
             continue
-        match = STATE_BLOCK.search(comment.get("body") or "")
+        body = comment.get("body") or ""
+        match = STATE_BLOCK.search(body)
         if match:
             latest = json.loads(match.group(1)).get("code_review")
+        elif latest is None:
+            # Codex answered without reviewing ("create an environment for this repo", a
+            # quota notice): report it instead of waiting for a review that will not come.
+            latest = {"status": "error", "message": body.strip()[:300]}
     return latest
 
 
@@ -97,6 +102,7 @@ def snapshot(number: int, required: list[str]) -> dict[str, Any]:
     if review is not None:
         codex = {
             "status": review.get("status"),
+            "message": review.get("message"),
             "commit": review.get("commit_sha"),
             "for_head": review.get("commit_sha") == head,
             "findings": review.get("has_any_findings"),
@@ -123,6 +129,8 @@ def settled(snap: dict[str, Any], *, until_merged: bool) -> bool:
     if until_merged:
         return False
     codex = snap["codex"]
+    if codex is not None and codex["status"] == "error":
+        return True
     codex_done = codex is not None and codex["for_head"] and codex["status"] == "completed"
     return snap["ci"] == "pass" and codex_done
 
