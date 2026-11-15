@@ -25,10 +25,11 @@ from typing import Any
 SEVERITY = re.compile(r"\bP[0-3]\b")
 
 THREADS_QUERY = """
-query($owner: String!, $name: String!, $number: Int!) {
+query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id isResolved isOutdated path line originalLine
           comments(first: 50) { nodes { author { login } body url createdAt } }
@@ -70,12 +71,27 @@ def repo() -> tuple[str, str]:
     return view["owner"]["login"], view["name"]
 
 
-def unresolved_threads(number: int) -> list[dict[str, Any]]:
+def all_threads(number: int) -> list[dict[str, Any]]:
+    """Every review thread on the PR, following the connection's cursors to the end."""
     owner, name = repo()
-    data = graphql(THREADS_QUERY, owner=owner, name=name, number=number)
-    threads = data["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+    threads: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        variables: dict[str, str | int] = {"owner": owner, "name": name, "number": number}
+        if cursor is not None:
+            variables["after"] = cursor
+        connection = graphql(THREADS_QUERY, **variables)["repository"]["pullRequest"][
+            "reviewThreads"
+        ]
+        threads.extend(connection["nodes"])
+        if not connection["pageInfo"]["hasNextPage"]:
+            return threads
+        cursor = connection["pageInfo"]["endCursor"]
+
+
+def unresolved_threads(number: int) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
-    for thread in threads:
+    for thread in all_threads(number):
         if thread["isResolved"]:
             continue
         comments = thread["comments"]["nodes"]
