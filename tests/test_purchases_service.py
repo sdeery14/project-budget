@@ -4,7 +4,12 @@ from datetime import date, datetime
 
 import pytest
 
-from projectbudget.domain.catalog import MovementReason, PurchaseStatus
+from projectbudget.domain.catalog import (
+    Confidence,
+    EstimateOrigin,
+    MovementReason,
+    PurchaseStatus,
+)
 from projectbudget.domain.money import CurrencyMismatchError, Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
@@ -56,6 +61,8 @@ def test_received_purchase_puts_every_line_into_stock(
         (MovementReason.RECEIVED, 2, date(2026, 11, 5))
     ]
     assert movements[0].purchase_line_id == info.lines[0].id
+    assert movements[0].purchase_id == info.id
+    assert movements[0].note == "Purchase 2026-11-05 from Tool Shop"
     assert purchases.get_purchase(session_factory, principal, info.id) == info
     assert purchases.list_purchases(session_factory, principal) == [info]
 
@@ -167,3 +174,60 @@ def test_read_only_principals_cannot_record_purchases(
     with pytest.raises(ReadOnlyPrincipalError):
         purchases.mark_purchased(session_factory, read_only_principal, clamp.id, 1, usd("1.00"))
     assert purchases.list_purchases(session_factory, read_only_principal) == []
+
+
+def test_receiving_records_the_price_paid_as_a_purchase_estimate(
+    session_factory: SessionFactory, principal: Principal, clamp: catalog.CatalogItemInfo
+) -> None:
+    """#24: for things bought again and again, what was paid is the best price evidence there is."""
+    catalog.add_estimate(
+        session_factory,
+        principal,
+        clamp.id,
+        catalog.EstimateCreate(price=usd("15.00"), as_of=date(2026, 10, 26)),
+    )
+    order = purchases.record_purchase(
+        session_factory,
+        principal,
+        purchases.PurchaseCreate(
+            lines=(_line(clamp.id, 3, "12.50"),),
+            status=PurchaseStatus.ORDERED,
+            ordered_on=date(2026, 11, 5),
+        ),
+        now=NOW,
+    )
+    # On order is not paid for yet as far as stock is concerned: nothing recorded.
+    current = catalog.current_estimate(session_factory, principal, clamp.id)
+    assert current is not None
+    assert current.price == usd("15.00")
+
+    line_id = order.lines[0].id
+    purchases.receive_line(
+        session_factory, principal, line_id, 1, occurred_on=date(2026, 11, 9), now=NOW
+    )
+    current = catalog.current_estimate(session_factory, principal, clamp.id)
+    assert current is not None
+    assert (current.price, current.as_of, current.confidence, current.origin) == (
+        usd("12.50"),
+        date(2026, 11, 9),
+        Confidence.HIGH,
+        EstimateOrigin.PURCHASE,
+    )
+
+    # The rest of the line arriving later says nothing new about the price.
+    purchases.receive_line(
+        session_factory, principal, line_id, 2, occurred_on=date(2026, 11, 12), now=NOW
+    )
+    origins = [e.origin for e in catalog.list_estimates(session_factory, principal, clamp.id)]
+    assert origins == [EstimateOrigin.PURCHASE, EstimateOrigin.MANUAL]
+
+    # Movements name the purchase; a vendor-less purchase just says the date.
+    received = [
+        m
+        for m in inventory.list_movements(session_factory, principal, clamp.id)
+        if m.reason is MovementReason.RECEIVED
+    ]
+    assert [(m.delta_qty, m.purchase_id, m.note) for m in received] == [
+        (2, order.id, "Purchase 2026-11-05"),
+        (1, order.id, "Purchase 2026-11-05"),
+    ]
