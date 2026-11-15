@@ -36,6 +36,7 @@ from projectbudget.services.purchases import InvalidPurchaseError, PurchaseState
 from projectbudget.services.requirements import (
     InvalidArchiveReasonError,
     ItemReferenceError,
+    QuantityBelowConsumedError,
     UnitMismatchError,
 )
 from projectbudget.services.sync import (
@@ -86,6 +87,7 @@ CONFLICT_ERRORS: tuple[type[Exception], ...] = (
     InsufficientOnHandError,
     OverConsumptionError,
     RequirementNotActiveError,
+    QuantityBelowConsumedError,
 )
 """Valid input that the current state forbids: answer 409."""
 

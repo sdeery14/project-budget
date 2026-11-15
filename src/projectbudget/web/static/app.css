@@ -107,6 +107,11 @@ th.num { text-align: right; }
 .actions { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
 .actions form { display: inline; }
 .actions button, button.small { margin: 0; padding: 0.2rem 0.5rem; font-size: 0.85rem; }
+details.edit summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+details.edit[open] { flex: 1 1 100%; }
+details.edit[open] summary { margin-bottom: 0.5rem; }
+.actions details.edit form.row { display: flex; margin-bottom: 0.5rem; }
+details.edit p.muted { margin: 0 0 0.5rem; font-size: 0.85rem; }
 button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
 .table-wrap { overflow-x: auto; }
 details.assumptions { margin: 1rem 0; }

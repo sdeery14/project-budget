@@ -346,3 +346,91 @@ def test_catalog_page_explains_confirming_and_offers_it_per_row(logged_in: TestC
         "Nothing to review: every item is confirmed."
         in logged_in.get("/catalog?review=unreviewed").text
     )
+
+
+def test_project_and_requirement_edit_forms(logged_in: TestClient) -> None:
+    """#13 and #14: a typo in a name, a changed quantity or priority, fixed on the page itself."""
+    csrf = _csrf(logged_in)
+    project_id = _location_id(
+        logged_in.post("/projects", data={"csrf_token": csrf, "name": "Shedd", "notes": "old"})
+    )
+    page = logged_in.get(f"/projects/{project_id}").text
+    assert 'id="edit-project"' in page
+    assert "<summary>Edit name and notes</summary>" in page
+    assert 'name="name" type="text" maxlength="200" value="Shedd"' in page
+
+    renamed = logged_in.post(
+        f"/projects/{project_id}", data={"csrf_token": csrf, "name": "Shed", "notes": "Back garden"}
+    )
+    assert renamed.status_code == 303
+    assert renamed.headers["location"] == f"/projects/{project_id}"
+    page = logged_in.get(f"/projects/{project_id}").text
+    assert "<h1>Shed</h1>" in page
+    assert "<p>Back garden</p>" in page
+    assert "Shedd" not in page
+
+    # A blank name is refused and the form stays open with the message beside it.
+    blank = logged_in.post(f"/projects/{project_id}", data={"csrf_token": csrf, "name": "  "})
+    assert blank.status_code == 422
+    assert 'id="edit-project" open' in blank.text
+    assert "Name" in blank.text.split('id="edit-project"')[1].split("</p>")[0]
+
+    # The requirement row: qty, priority, sharing and notes, swapped over htmx.
+    added = logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "qty": "4", "item_text": "Hinge"},
+    )
+    assert added.status_code == 303, added.text
+    requirement_id = logged_in.get(f"/api/v1/projects/{project_id}/requirements").json()[0]["id"]
+    item_id = logged_in.get(f"/api/v1/requirements/{requirement_id}").json()["catalog_item_id"]
+    hx = {"HX-Request": "true"}
+    page = logged_in.get(f"/projects/{project_id}").text
+    row = page.split(f'id="requirement-{requirement_id}"')[1].split("</tr>")[0]
+    assert "<summary>Edit</summary>" in row
+    assert f'action="/requirements/{requirement_id}/edit"' in row
+    assert 'name="qty" type="number" min="1" value="4"' in row
+
+    edited = logged_in.post(
+        f"/requirements/{requirement_id}/edit",
+        data={
+            "csrf_token": csrf,
+            "qty": "6",
+            "priority": "1",
+            "sharing": "exclusive",
+            "notes": "brass, not zinc",
+        },
+        headers=hx,
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.text.lstrip().startswith("<tr")
+    assert '<td class="num" data-label="Qty">6 each</td>' in edited.text
+    assert 'class="badge p1">P1</span>' in edited.text
+    assert ">exclusive</span>" in edited.text
+    assert "brass, not zinc" in edited.text
+    assert 'value="6" required' in edited.text  # the form reopens with the saved values
+
+    # Below what is already consumed: refused as a conflict, the row shows why.
+    logged_in.post(f"/catalog/{item_id}/adjustments", data={"csrf_token": csrf, "delta": "3"})
+    used = logged_in.post(
+        f"/requirements/{requirement_id}/consume", data={"csrf_token": csrf, "qty": "2"}, headers=hx
+    )
+    assert used.status_code == 200, used.text
+    too_low = logged_in.post(
+        f"/requirements/{requirement_id}/edit", data={"csrf_token": csrf, "qty": "1"}, headers=hx
+    )
+    assert too_low.status_code == 409
+    assert "2 already consumed" in too_low.text
+    assert 'min="2" value="6"' in too_low.text  # the browser stops the next attempt earlier
+    assert logged_in.get(f"/api/v1/requirements/{requirement_id}").json()["qty"] == 6
+    via_api = logged_in.patch(
+        f"/api/v1/requirements/{requirement_id}", json={"qty": 1}, headers={"X-CSRF-Token": csrf}
+    )
+    assert via_api.status_code == 409
+
+    # Without htmx the same form redirects back to the project.
+    plain = logged_in.post(
+        f"/requirements/{requirement_id}/edit", data={"csrf_token": csrf, "qty": "2"}
+    )
+    assert plain.status_code == 303
+    assert plain.headers["location"] == f"/projects/{project_id}"
+    assert "2 each" in logged_in.get(f"/projects/{project_id}").text

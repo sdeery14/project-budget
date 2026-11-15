@@ -16,6 +16,29 @@
   <td class="num" data-label="Consumed">{{ row.consumed }}</td>
   <td class="num" data-label="On hand">{{ row.on_hand }}</td>
   <td class="actions">
+    <details class="edit">
+      <summary>Edit</summary>
+      <form method="post" action="/requirements/{{ r.id }}/edit" hx-post="/requirements/{{ r.id }}/edit" hx-target="closest tr" hx-swap="outerHTML" class="row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if r.source_id is none %}
+        <div><label for="qty-{{ r.id }}">Qty ({{ row.item.unit }})</label>
+          <input id="qty-{{ r.id }}" name="qty" type="number" min="{{ [row.consumed, 1] | max }}" value="{{ r.qty }}" required></div>
+        <div><label for="priority-{{ r.id }}">Priority</label>
+          <select id="priority-{{ r.id }}" name="priority">
+            {% for p in (1, 2, 3) %}<option value="{{ p }}"{% if p == r.priority %} selected{% endif %}>P{{ p }}</option>{% endfor %}
+          </select></div>
+        {% endif %}
+        <div><label for="sharing-{{ r.id }}">Sharing</label>
+          <select id="sharing-{{ r.id }}" name="sharing">
+            <option value="shared"{% if r.sharing.value == "shared" %} selected{% endif %}>shared</option>
+            <option value="exclusive"{% if r.sharing.value == "exclusive" %} selected{% endif %}>exclusive</option>
+          </select></div>
+        <div class="grow"><label for="notes-{{ r.id }}">Notes</label>
+          <input id="notes-{{ r.id }}" name="notes" type="text" maxlength="2000" value="{{ r.notes }}" placeholder="optional"></div>
+        <button type="submit" class="secondary">Save</button>
+      </form>
+      {% if r.source_id is not none %}<p class="muted">Quantity and priority come from the manifest; sharing and notes are yours.</p>{% endif %}
+    </details>
     {% if r.intent.value == "active" %}
       <form method="post" action="/requirements/{{ r.id }}/intent" hx-post="/requirements/{{ r.id }}/intent" hx-target="closest tr" hx-swap="outerHTML">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="intent" value="paused">

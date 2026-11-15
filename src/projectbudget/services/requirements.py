@@ -16,13 +16,14 @@ from sqlalchemy.orm import Session
 from projectbudget.domain.catalog import (
     ARCHIVE_REASON_MAX_LENGTH,
     Intent,
+    MovementReason,
     Sharing,
     validate_priority,
     validate_quantity,
     validate_unit,
 )
 from projectbudget.domain.principal import Principal
-from projectbudget.persistence.models import CatalogItem, Requirement
+from projectbudget.persistence.models import CatalogItem, InventoryMovement, Requirement
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services.catalog import find_or_create_from_text, load_live_item
 from projectbudget.services.clock import utcnow
@@ -47,6 +48,19 @@ class ItemReferenceError(ValueError):
 
 class InvalidArchiveReasonError(ValueError):
     """Too long, or given for an intent other than archived."""
+
+
+class QuantityBelowConsumedError(ValueError):
+    """The quantity cannot drop below what the project has already used from stock (#14)."""
+
+    def __init__(self, requirement_id: str, consumed: int, wanted: int) -> None:
+        super().__init__(
+            f"{consumed} already consumed against this requirement; the quantity cannot "
+            f"go below that ({wanted} given)"
+        )
+        self.requirement_id = requirement_id
+        self.consumed = consumed
+        self.wanted = wanted
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +145,17 @@ def _resolve_item(
     return item
 
 
+def _consumed_in(db: Session, requirement_id: str) -> int:
+    """Units already used from stock against the requirement (the inventory service's sum)."""
+    total = db.scalar(
+        select(func.coalesce(func.sum(InventoryMovement.delta_qty), 0)).where(
+            InventoryMovement.requirement_id == requirement_id,
+            InventoryMovement.reason == MovementReason.CONSUMED.value,
+        )
+    )
+    return -int(total or 0)
+
+
 def _next_sort_order(db: Session, project_id: str) -> int:
     current = db.scalar(
         select(func.max(Requirement.sort_order)).where(Requirement.project_id == project_id)
@@ -187,6 +212,9 @@ def update_requirement(
     with session_factory.begin() as db:
         row = load_requirement(db, requirement_id)
         if qty is not None:
+            consumed = _consumed_in(db, requirement_id)
+            if qty < consumed:
+                raise QuantityBelowConsumedError(requirement_id, consumed, qty)
             row.qty = qty
         if priority is not None:
             row.priority = priority

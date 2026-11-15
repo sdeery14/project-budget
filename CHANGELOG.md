@@ -6,6 +6,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Added
 
+- A project's name and notes can be edited on its page, and a requirement's quantity, priority, sharing and notes on its row, instead of through the API or by cancelling and re-adding (#13, #14). A quantity is refused below what the project has already consumed (`409` on `PATCH /api/v1/requirements/{id}` too). On a synced project the forms offer only what the manifest does not own: the notes, and a row's sharing and notes.
 - A favicon: the tab has an icon and the browser console no longer logs a 404 for `/favicon.ico` on every page (#16).
 - `projectbudget reset [--yes]`: empty the workspace in one transaction, keeping the owner, sessions, API tokens and currency, instead of deleting the database file and running `init` again (#33).
 - An Account page (`/settings/account`) to change the owner's password with the current one, signing every other session out, and a `projectbudget passwd` command on the host for a forgotten password (#12). Neither is reachable with an API token.

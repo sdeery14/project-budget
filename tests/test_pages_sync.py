@@ -309,6 +309,15 @@ def test_synced_project_page_names_its_source_and_marks_manual_rows(
     assert 'id="manual-note"' in page
     assert "<strong>manual</strong>" in page
     assert "manual</span>" not in page  # every row so far comes from the manifest
+    # The manifest owns the project name and each row's qty and priority (ADR-007), so the
+    # edit forms offer only what is the owner's: the notes, and a row's sharing and notes.
+    assert "<summary>Edit notes</summary>" in page
+    assert 'name="name"' not in page.split('id="edit-project"')[1].split("</details>")[0]
+    assert "The manifest sets a synced project's name" in page
+    managed_row = page.split('id="requirements"')[1].split("<tr id=")[1].split("</tr>")[0]
+    assert 'name="qty"' not in managed_row
+    assert 'name="sharing"' in managed_row
+    assert "Quantity and priority come from the manifest" in managed_row
 
     # A hand-added row on a synced project is badged, the manifest's rows are not.
     added = logged_in.post(
@@ -321,6 +330,7 @@ def test_synced_project_page_names_its_source_and_marks_manual_rows(
     badged = [row for row in rows if "manual</span>" in row]
     assert len(badged) == 1
     assert "Tape measure" in badged[0]
+    assert 'name="qty"' in badged[0]  # a manual row is fully editable
     # The HTMX row swap renders the same badge.
     requirement_id = badged[0].split('"')[1].removeprefix("requirement-")
     swapped = logged_in.post(
