@@ -25,7 +25,7 @@ from projectbudget.domain.catalog import (
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import CatalogItem, InventoryMovement, Requirement
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services.catalog import find_or_create_from_text, load_live_item
+from projectbudget.services.catalog import find_or_create_from_text, load_live_item, lock_item
 from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import NotFoundError, require_write
 from projectbudget.services.projects import load_project
@@ -212,6 +212,9 @@ def update_requirement(
     with session_factory.begin() as db:
         row = load_requirement(db, requirement_id)
         if qty is not None:
+            # Consumption checks "qty - consumed" under the item lock; take the same lock
+            # here so a consumption in flight cannot land after this check read the total.
+            lock_item(db, row.catalog_item_id)
             consumed = _consumed_in(db, requirement_id)
             if qty < consumed:
                 raise QuantityBelowConsumedError(requirement_id, consumed, qty)

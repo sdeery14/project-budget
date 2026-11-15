@@ -297,7 +297,30 @@ def test_project_and_requirement_can_be_edited_in_place(
     row = page.get_by_role("row", name=re.compile("Bench dog"))
     expect(row).to_contain_text("4 each")
     expect(row).to_contain_text("P1")
-    assert page.url.endswith(f"/projects/{page.url.rsplit('/', 1)[1]}")  # swapped in place
+    project_url = page.url
+
+    # Stock two, use two, then try to lower the quantity below that: the refusal (a 409)
+    # is swapped into the row, not swallowed by htmx.
+    row.get_by_role("link", name="Bench dog").click()
+    page.get_by_label("Adjust by").fill("2")
+    page.get_by_role("button", name="Record adjustment").click()
+    page.goto(project_url)
+    row = page.get_by_role("row", name=re.compile("Bench dog"))
+    row.get_by_label("Quantity to consume").fill("2")
+    row.get_by_role("button", name="Consume").click()
+    row = page.get_by_role("row", name=re.compile("Bench dog"))
+    expect(row).to_contain_text("2")
+    row.get_by_text("Edit", exact=True).click()
+    page.evaluate("() => document.querySelector('#requirements input[name=qty]').min = '0'")
+    row.get_by_label(re.compile(r"^Qty")).fill("1")
+    row.get_by_role("button", name="Save").click()
+    row = page.get_by_role("row", name=re.compile("Bench dog"))
+    expect(row.get_by_role("alert")).to_contain_text("2 already consumed")
+    expect(row).to_contain_text("4 each")
+    assert page.url == project_url  # still swapped in place
+    # Chromium logs every non-2xx response as a console error; that one line is the refusal.
+    assert [e for e in errors if "409" not in e] == []
+    errors.clear()
 
     # The opened edit forms fit a phone too.
     page.set_viewport_size({"width": PHONE_WIDTH, "height": 700})

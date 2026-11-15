@@ -427,6 +427,21 @@ def test_project_and_requirement_edit_forms(logged_in: TestClient) -> None:
     )
     assert via_api.status_code == 409
 
+    # An empty notes field clears the notes; a form without the field keeps them.
+    kept = logged_in.post(
+        f"/requirements/{requirement_id}/edit", data={"csrf_token": csrf, "qty": "6"}, headers=hx
+    )
+    assert kept.status_code == 200
+    assert "brass, not zinc" in kept.text
+    cleared = logged_in.post(
+        f"/requirements/{requirement_id}/edit",
+        data={"csrf_token": csrf, "qty": "6", "notes": ""},
+        headers=hx,
+    )
+    assert cleared.status_code == 200
+    assert "brass, not zinc" not in cleared.text
+    assert logged_in.get(f"/api/v1/requirements/{requirement_id}").json()["notes"] == ""
+
     # Without htmx the same form redirects back to the project.
     plain = logged_in.post(
         f"/requirements/{requirement_id}/edit", data={"csrf_token": csrf, "qty": "2"}

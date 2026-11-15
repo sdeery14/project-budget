@@ -6,7 +6,7 @@ JSON twins: ``/api/v1/projects`` and ``/api/v1/requirements``.
 from dataclasses import dataclass
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from projectbudget.domain.catalog import Intent, ItemKind, Sharing
@@ -234,6 +234,12 @@ def set_intent(
     return _row_or_redirect(request, principal, info)
 
 
+async def submitted_fields(request: Request) -> frozenset[str]:
+    """The names the form body carries. FastAPI hands an empty text field to the endpoint as
+    its default, the same as a missing one; this tells "cleared" from "not on this form"."""
+    return frozenset((await request.form()).keys())
+
+
 def _row_error(
     request: Request, principal: Principal, requirement_id: str, error: str, status_code: int
 ) -> Response:
@@ -260,6 +266,7 @@ def edit_requirement(
     request: Request,
     principal: Owner,
     requirement_id: str,
+    sent: Annotated[frozenset[str], Depends(submitted_fields)],
     qty: Annotated[int | None, Form()] = None,
     priority: Annotated[int | None, Form()] = None,
     sharing: Annotated[Sharing | None, Form()] = None,
@@ -268,8 +275,11 @@ def edit_requirement(
     """Change quantity, priority, sharing or notes in place (#14); the JSON twin is PATCH.
 
     A field the form did not send keeps its value: a manifest-managed row's form sends only
-    sharing and notes, the two fields the owner keeps on such a row (ADR-007).
+    sharing and notes, the two fields the owner keeps on such a row (ADR-007). A notes field
+    that was sent empty clears the notes.
     """
+    if notes is None and "notes" in sent:
+        notes = ""
     command = requirements.RequirementUpdate(
         qty=qty, priority=priority, sharing=sharing, notes=notes
     )

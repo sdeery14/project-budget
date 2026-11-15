@@ -140,3 +140,54 @@ def test_many_adjustments_never_go_negative(
     assert results.count("ok") == 5
     assert results.count("insufficient") == 7
     assert inventory.on_hand(session_factory, principal, item.id) == 0
+
+
+def test_a_quantity_edit_and_a_consumption_cannot_cross(
+    session_factory: SessionFactory, principal: Principal, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#14: lowering the quantity reads the consumed total under the item lock, like consuming."""
+    req = _need(session_factory, principal, 4, on_hand=5)
+    barrier = threading.Barrier(2)
+
+    def paused(real: Callable[..., int]) -> Callable[..., int]:
+        def wrapper(*args: Any, **kwargs: Any) -> int:
+            value = real(*args, **kwargs)
+            with contextlib.suppress(threading.BrokenBarrierError):
+                barrier.wait(timeout=BARRIER_TIMEOUT)
+            return value
+
+        return wrapper
+
+    # Both sides pause right after reading the consumed total: the race window.
+    real_consumed = inventory.consumed_by_requirement
+    monkeypatch.setattr(
+        inventory,
+        "consumed_by_requirement",
+        paused(lambda *a, **k: real_consumed(*a, **k)),  # type: ignore[arg-type]
+    )
+    monkeypatch.setattr(requirements, "_consumed_in", paused(requirements._consumed_in))
+
+    def edit() -> str:
+        try:
+            requirements.update_requirement(
+                session_factory, principal, req.id, requirements.RequirementUpdate(qty=1)
+            )
+        except requirements.QuantityBelowConsumedError:
+            return "below"
+        return "ok"
+
+    def consume() -> str:
+        try:
+            inventory.consume(session_factory, principal, req.id, 2)
+        except inventory.OverConsumptionError:
+            return "over"
+        return "ok"
+
+    actions = (edit, consume)
+    results = _run(2, lambda i: actions[i]())
+    after = requirements.get_requirement(session_factory, principal, req.id)
+    used = inventory.consumed(session_factory, principal, req.id)
+    # Whichever went first, the other was refused, and the quantity never undercuts usage.
+    assert sorted(results) in (["below", "ok"], ["ok", "over"]), results
+    assert after.qty >= used
+    assert (after.qty, used) in ((4, 2), (1, 0))
