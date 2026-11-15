@@ -56,7 +56,7 @@ The canonical fictional workspace is `src/projectbudget/fixtures/canonical.py`; 
 ## Conventions
 
 - **Branch from `main`, squash-merge back.** The PR title becomes the commit message, so write it as a [conventional commit](https://www.conventionalcommits.org/): `feat(domain): add Money`, `fix(sync): ...`, `docs: ...`, `chore(ci): ...`.
-- **Every PR names the ADR it implements.** The PR template asks for it. Reviews check the change against that ADR, not against general preference.
+- **Every PR names the ADR it implements.** The PR template asks for it. Reviews check the change against that ADR, not against general preference. Codex reviews every PR automatically when it is marked ready; its review guidelines, and the working notes any coding agent should read, are in [AGENTS.md](AGENTS.md).
 - **The deferred list is binding (ADR-011).** Anything under "Not in V1" in the RFC needs a new ADR before it moves earlier. Open the ADR as its own PR first.
 - **Layers are rules, not suggestions.** Domain code imports no SQLAlchemy and does no I/O. Only the service layer opens a session or commits. Routers contain no business logic. Every state-changing UI action has a JSON twin.
 - **Money is an integer in minor units.** Floats never touch money, including at text boundaries (ADR-003).
