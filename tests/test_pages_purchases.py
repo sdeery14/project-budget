@@ -61,6 +61,21 @@ def test_purchase_pages_create_receive_partially_and_close(
     page = logged_in.get(f"/purchases/{purchase_id}").text
     assert "1 / 2" in page
     assert 'id="outstanding">1<' in page
+    # The item page links the receipt back to its purchase and shows the paid price (#24).
+    item_page = logged_in.get(f"/catalog/{canonical.clamp.id}").text
+    assert (
+        f'<td data-label="Note"><a href="/purchases/{purchase_id}">Purchase '
+        in item_page.split('id="movements"')[1]
+    )
+    assert "from Tool Shop</a></td>" in item_page
+    assert '<td data-label="Origin">purchase</td>' in item_page
+    assert 'id="current-price">12.50 USD' in item_page
+    movement = next(
+        m
+        for m in logged_in.get(f"/api/v1/catalog/items/{canonical.clamp.id}/movements").json()
+        if m["reason"] == "received"
+    )
+    assert (movement["purchase_id"], movement["purchase_line_id"]) == (purchase_id, line_id)
     backlog = logged_in.get("/backlog").text
     clamp_row = backlog[backlog.index(f'id="row-{canonical.clamp.id}"') :]
     clamp_row = clamp_row[: clamp_row.index("</tr>")]

@@ -419,6 +419,32 @@ def merge_items(
 # --- price estimates ---------------------------------------------------------------
 
 
+def insert_estimate(
+    db: Session,
+    item_id: str,
+    price: Money,
+    *,
+    as_of: date,
+    confidence: Confidence,
+    origin: EstimateOrigin,
+    now: datetime,
+) -> PriceEstimate:
+    """Write one estimate inside the caller's transaction; the caller has checked the price."""
+    row = PriceEstimate(
+        id=str(uuid.uuid4()),
+        catalog_item_id=item_id,
+        amount=price.amount,
+        currency=price.currency,
+        as_of=as_of,
+        confidence=Confidence(confidence).value,
+        origin=EstimateOrigin(origin).value,
+        created_at=now,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
 def add_estimate(
     session_factory: SessionFactory,
     principal: Principal,
@@ -437,18 +463,15 @@ def add_estimate(
     moment = now or utcnow()
     with session_factory.begin() as db:
         item = load_live_item(db, item_id)
-        row = PriceEstimate(
-            id=str(uuid.uuid4()),
-            catalog_item_id=item.id,
-            amount=command.price.amount,
-            currency=command.price.currency,
+        row = insert_estimate(
+            db,
+            item.id,
+            command.price,
             as_of=command.as_of or today(),
-            confidence=Confidence(command.confidence).value,
-            origin=EstimateOrigin(command.origin).value,
-            created_at=moment,
+            confidence=Confidence(command.confidence),
+            origin=EstimateOrigin(command.origin),
+            now=moment,
         )
-        db.add(row)
-        db.flush()
         return _estimate_info(row)
 
 

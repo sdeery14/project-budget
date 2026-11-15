@@ -15,16 +15,21 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.orm import Session
 
-from projectbudget.domain.catalog import PurchaseStatus, validate_quantity
+from projectbudget.domain.catalog import (
+    Confidence,
+    EstimateOrigin,
+    PurchaseStatus,
+    validate_quantity,
+)
 from projectbudget.domain.money import CurrencyMismatchError, Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.models import Purchase, PurchaseLine
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services import workspace
-from projectbudget.services.catalog import confirm, load_live_item, lock_item
+from projectbudget.services.catalog import confirm, insert_estimate, load_live_item, lock_item
 from projectbudget.services.clock import today, utcnow
 from projectbudget.services.guards import NotFoundError, require_write
-from projectbudget.services.inventory import record_receipt
+from projectbudget.services.inventory import receipt_note, record_receipt
 
 VENDOR_MAX_LENGTH = 200
 COUNTS_AS_SPENT = (PurchaseStatus.ORDERED.value, PurchaseStatus.RECEIVED.value)
@@ -243,10 +248,25 @@ def _receive(
         db,
         item_id=line.catalog_item_id,
         qty=wanted,
+        purchase_id=purchase.id,
         purchase_line_id=line.id,
         occurred_on=occurred_on,
+        note=receipt_note(purchase.ordered_on, purchase.vendor),
         now=now,
     )
+    if line.received_qty == 0:
+        # The first receipt on a line records what was actually paid as a price estimate
+        # (origin ``purchase``, RFC v3 §4), dated the receipt so the latest-as-of rule picks
+        # it up over an older guess. Later receipts on the same line say nothing new.
+        insert_estimate(
+            db,
+            line.catalog_item_id,
+            Money(line.unit_price, purchase.currency),
+            as_of=occurred_on,
+            confidence=Confidence.HIGH,
+            origin=EstimateOrigin.PURCHASE,
+            now=now,
+        )
     line.received_qty += wanted
     purchase.updated_at = now
 

@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from projectbudget.adapters.sources import FetchedManifest
-from projectbudget.domain.catalog import REMOVED_FROM_SOURCE, Intent, RunStatus, SourceKind
+from projectbudget.domain.catalog import (
+    REMOVED_FROM_SOURCE,
+    EstimateOrigin,
+    Intent,
+    RunStatus,
+    SourceKind,
+)
 from projectbudget.domain.money import Money
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
@@ -72,13 +78,19 @@ def test_acceptance_6_rerun_changes_nothing_and_a_missing_item_is_archived_with_
     )
     inventory.consume(session_factory, principal, posts_req.id, 2)
     backlog_before = backlog.get_backlog(session_factory, principal)
+    # The manifest's estimate and the price paid on receipt (#24): two, and no more after this.
+    estimates_before = catalog.list_estimates(session_factory, principal, posts_item.id)
+    assert sorted(e.origin for e in estimates_before) == [
+        EstimateOrigin.MANIFEST,
+        EstimateOrigin.PURCHASE,
+    ]
 
     # Re-running the same manifest changes nothing: a no-op run, identical backlog, no new rows.
     again = sync.apply(session_factory, principal, source.id, import_dir=tmp_path, now=NOW)
     assert again.noop
     assert again.run.status is RunStatus.NOOP
     assert backlog.get_backlog(session_factory, principal) == backlog_before
-    assert len(catalog.list_estimates(session_factory, principal, posts_item.id)) == 1
+    assert catalog.list_estimates(session_factory, principal, posts_item.id) == estimates_before
     forced = sync.apply(
         session_factory, principal, source.id, import_dir=tmp_path, force=True, now=NOW
     )

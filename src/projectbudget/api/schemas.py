@@ -189,6 +189,12 @@ class MovementOut(BaseModel):
     occurred_on: date
     note: str
     created_at: datetime
+    purchase_line_id: str | None = Field(
+        default=None, description="The purchase line a received movement came from."
+    )
+    purchase_id: str | None = Field(
+        default=None, description="The purchase a received movement came from."
+    )
 
     @classmethod
     def of(cls, info: MovementInfo) -> "MovementOut":
@@ -201,6 +207,8 @@ class MovementOut(BaseModel):
             occurred_on=info.occurred_on,
             note=info.note,
             created_at=info.created_at,
+            purchase_line_id=info.purchase_line_id,
+            purchase_id=info.purchase_id,
         )
 
 

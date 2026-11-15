@@ -78,6 +78,8 @@
       {% endfor %}
     </tbody>
   </table>
+  <p class="muted">The latest "as of" date is the current price. Receiving a purchase records the price paid as an
+  estimate of origin <code>purchase</code>, dated the day it arrived.</p>
 </section>
 
 <section class="card">
@@ -97,7 +99,7 @@
         <td data-label="Date">{{ m.occurred_on.isoformat() }}</td>
         <td class="num" data-label="Change">{{ "%+d" | format(m.delta_qty) }}</td>
         <td data-label="Reason">{{ m.reason.value }}{% if m.requirement_id %} <span class="muted">(against a requirement)</span>{% endif %}</td>
-        <td data-label="Note">{{ m.note }}</td>
+        <td data-label="Note">{% if m.purchase_id %}<a href="/purchases/{{ m.purchase_id }}">{{ m.note or "Purchase" }}</a>{% else %}{{ m.note }}{% endif %}</td>
       </tr>
       {% else %}
       <tr><td colspan="4" class="muted">No stock movements yet.</td></tr>
