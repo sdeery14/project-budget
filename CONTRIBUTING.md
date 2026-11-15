@@ -64,6 +64,17 @@ The canonical fictional workspace is `src/projectbudget/fixtures/canonical.py`; 
 - **Strict typing.** `mypy --strict` passes on `src` and `tests`. Relax a module only with a comment saying why.
 - **No real data.** Fixtures, screenshots, issues and CI logs use the canonical fictional workspace only.
 
+## The development loop
+
+Work arrives as issues, one per thing, grouped into a milestone for a round. A round runs like this, whether a person or an agent does the typing:
+
+1. One branch and one PR per issue. The PR is opened ready for review and names the ADR it implements.
+2. CI runs the six required checks. Codex reviews the PR automatically when it opens or is marked ready, following the guidelines in [AGENTS.md](AGENTS.md); `@codex review` asks for another pass after fixes.
+3. Findings are fixed, each thread gets a reply saying what changed, and the thread is resolved. Branch protection requires every thread to be resolved before a merge.
+4. When CI is green and Codex is clean for the head commit, the PR is squash-merged. Auto-merge is enabled on the repository, so a PR can be armed with `gh pr merge --auto --squash` and protection does the rest.
+
+The `/round` skill in `.claude/skills/round/SKILL.md` runs that loop unattended over a whole milestone, with two helpers: `scripts/pr_wait.py` waits for the checks and the Codex state of a PR, and `scripts/review_threads.py` lists unresolved review threads and resolves them with a reply. Its hard limits are the parts of the process that stay with the owner: anything that changes an ADR, a workflow, a migration or a dependency is opened and reviewed but labelled `needs-human` instead of merged; a PR that is not clean after two fix rounds gets the same label; release tags are never created by the loop.
+
 ## Writing an ADR
 
 Copy `docs/adr/000-template.md` to the next number, fill in Context, Decision and Consequences, set Status to Proposed, and open a PR. The ADR is Accepted when that PR merges.

@@ -18,7 +18,7 @@ def render() -> str:
 
 def main() -> None:
     TARGET.write_text(render(), encoding="utf-8", newline="\n")
-    print(f"Wrote {TARGET.relative_to(TARGET.parent.parent)}")  # noqa: T201
+    print(f"Wrote {TARGET.relative_to(TARGET.parent.parent)}")
 
 
 if __name__ == "__main__":

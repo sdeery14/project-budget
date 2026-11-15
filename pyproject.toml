@@ -117,6 +117,11 @@ ignore = [
   "S106",
 ]
 "src/projectbudget/persistence/migrations/versions/*" = ["N999"] # Alembic names files by revision id
+"scripts/**" = [
+  "T20",  # the scripts talk to the terminal
+  "S603", # they run `gh` with a fixed argument list; no shell, no untrusted command
+  "S607",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["projectbudget"]
