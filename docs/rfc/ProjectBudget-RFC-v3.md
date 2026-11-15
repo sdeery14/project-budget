@@ -25,6 +25,8 @@ Smaller corrections also applied: SQLite pragmas, backup method, CSV project id,
 
 ProjectBudget answers one question: **given everything my projects still need, what can I buy next, and when?** It consolidates requirements across projects into one honest shopping backlog and schedules purchases against a manually entered discretionary budget.
 
+> **Amended by [ADR-012](../adr/012-per-project-lists-one-budget.md) (2026-11-11), after Owner Acceptance Testing (#11, #32):** the product schedules several projects' shopping lists against one budget and shows what to buy next, and when. The backlog is one priority queue across projects. Consolidation per catalog item (§4, ADR-004) stays as the mechanism that keeps that queue honest when projects share an item; it is no longer the headline, and "overlapping parts" is no longer part of the target user. For synced projects the manifest in the repository is the source of truth; the app is the source of truth only for projects entered by hand.
+
 **Target user:** a maker, cyclist, homelabber or DIYer running two or more projects with overlapping parts, who will run one process on a laptop, NAS or small VPS. No GitHub, bank or programming knowledge required; GitHub sync is optional.
 
 **Core journey (must work end to end in V1):** create projects → add requirements (free text or picked from the catalog) → see the consolidated backlog with priced subtotal and unpriced count → enter budget inputs → read an explained month-by-month purchase timeline → mark an item purchased → watch it leave the backlog and timeline, and watch the spent amount leave the budget.

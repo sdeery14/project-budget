@@ -24,6 +24,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 - Default backlog and timeline order within a priority tier is now by project (creation order) and then each project's own requirement order instead of alphabetical; a manifest sets that order to its file order on every apply, so the file's order is the purchase order (#34, ADR-012). The owner's explicit backlog order still wins.
 - Review state now has a visible purpose: the catalog page says that confirming an item stops a manifest from changing its kind or unit, offers a one-click Confirm on each unreviewed row and a filter for unreviewed items (`GET /api/v1/catalog/items?review_state=unreviewed`), and the app confirms an item itself when the owner edits it, counts its stock or buys it. The item page's Review select is gone; saving the form, or "Confirm as is", confirms the item (#36, ADR-012).
 - Receiving a purchase now records the price paid as a `purchase`-origin estimate, dated the day it arrived, so the current price follows what was actually paid; and a received stock movement says which purchase it came from ("Purchase 2026-11-09 from Tool Shop"), linked on the item page, with `purchase_id` and `purchase_line_id` on the movements API (#24).
+- The backlog page, the README and the RFC's thesis now say what ADR-012 decided: several projects' lists in one priority queue against one budget, with consolidation per item as the mechanism that keeps the queue honest rather than the headline (#32).
 
 ### Fixed
 
