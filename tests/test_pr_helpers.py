@@ -133,25 +133,41 @@ def test_issue_comments_follow_every_page(monkeypatch: pytest.MonkeyPatch) -> No
     assert all("/issues/64/comments?per_page=100&page=" in url for url in asked)
 
 
-def test_head_arrival_is_the_first_check_run_not_the_commit_date(
+def test_head_arrival_is_the_check_suite_creation_not_a_run_start(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Pushed 19:10 (suites created), runners busy until 19:15: the boundary is the push."""
     answers = {
-        f"repos/{{owner}}/{{repo}}/commits/{HEAD}/check-runs?per_page=100": {
-            "check_runs": [
-                {"name": "Tests", "started_at": "2026-11-15T19:13:05Z"},
-                {"name": "Lint", "started_at": "2026-11-15T19:13:04Z"},
-                {"name": "Queued", "started_at": None},
+        f"repos/{{owner}}/{{repo}}/commits/{HEAD}/check-suites?per_page=100": {
+            "check_suites": [
+                {"app": {"slug": "github-actions"}, "created_at": "2026-11-15T19:10:05Z"},
+                {"app": {"slug": "other-app"}, "created_at": "2026-11-15T19:10:02Z"},
+                {"app": {"slug": "odd"}, "created_at": None},
             ]
         }
     }
     monkeypatch.setattr(pr_wait, "gh", lambda *args: answers[args[1]])
-    assert pr_wait.head_arrived_at(HEAD) == "2026-11-15T19:13:04Z"
+    assert pr_wait.head_arrived_at(HEAD) == "2026-11-15T19:10:02Z"
+
+
+def test_a_notice_posted_while_ci_is_queued_counts_for_the_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pushed 19:10, quota notice 19:11, first job starts 19:15: the notice is the answer."""
+    with_comments(
+        monkeypatch,
+        [
+            state_comment(OLD, findings=True, created_at="2026-11-15T18:50:00Z"),
+            codex_comment("Quota exceeded for this workspace.", "2026-11-15T19:11:00Z"),
+        ],
+    )
+    state = pr_wait.codex_state(64, HEAD, "2026-11-15T19:10:02Z")
+    assert state == {"status": "error", "message": "Quota exceeded for this workspace."}
 
 
 def test_head_arrival_falls_back_to_statuses_then_to_now(monkeypatch: pytest.MonkeyPatch) -> None:
     answers: dict[str, Any] = {
-        f"repos/{{owner}}/{{repo}}/commits/{HEAD}/check-runs?per_page=100": {"check_runs": []},
+        f"repos/{{owner}}/{{repo}}/commits/{HEAD}/check-suites?per_page=100": {"check_suites": []},
         f"repos/{{owner}}/{{repo}}/commits/{HEAD}/status": {
             "statuses": [{"created_at": "2026-11-15T19:13:30Z"}]
         },
@@ -162,7 +178,7 @@ def test_head_arrival_falls_back_to_statuses_then_to_now(monkeypatch: pytest.Mon
     answers[f"repos/{{owner}}/{{repo}}/commits/{HEAD}/status"] = {"statuses": []}
     before = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     arrived = pr_wait.head_arrived_at(HEAD)
-    assert arrived >= before  # nothing posted before now can be about a push with no checks yet
+    assert arrived >= before  # nothing posted before now can be about a push with no suites yet
 
 
 def test_a_notice_between_commit_and_push_is_about_the_old_head(

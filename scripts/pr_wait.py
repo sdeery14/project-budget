@@ -85,25 +85,27 @@ def issue_comments(number: int) -> list[dict[str, Any]]:
 
 
 def head_arrived_at(head: str) -> str:
-    """When the head commit reached GitHub: the start of its first check run.
+    """When the head commit reached GitHub: the creation of its first check suite.
 
     A commit's own dates say when it was made, not when it was pushed, and a notice Codex
-    posted between the two is about the previous head. Check runs start within seconds of
-    a push, so their earliest start is the boundary; with none yet, the push is happening
-    now and nothing posted so far can be about it.
+    posted between the two is about the previous head. GitHub creates a commit's check
+    suites at the push itself, before any runner picks a job up, so their earliest creation
+    is the boundary even when CI queues. Commit statuses are the fallback for a repository
+    without check suites; with neither, the push is happening now and nothing posted so far
+    can be about it.
     """
-    runs = gh("api", f"repos/{{owner}}/{{repo}}/commits/{head}/check-runs?per_page=100") or {}
-    started: list[str] = [
-        str(run["started_at"]) for run in runs.get("check_runs") or [] if run.get("started_at")
+    suites = gh("api", f"repos/{{owner}}/{{repo}}/commits/{head}/check-suites?per_page=100") or {}
+    created: list[str] = [
+        str(s["created_at"]) for s in suites.get("check_suites") or [] if s.get("created_at")
     ]
-    if not started:
+    if not created:
         status = gh("api", f"repos/{{owner}}/{{repo}}/commits/{head}/status") or {}
-        started = [
+        created = [
             str(s["created_at"]) for s in status.get("statuses") or [] if s.get("created_at")
         ]
-    if not started:
+    if not created:
         return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return min(started)
+    return min(created)
 
 
 def codex_state(number: int, head: str, head_arrived: str) -> dict[str, Any] | None:
