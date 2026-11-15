@@ -2,7 +2,7 @@
 
 **Given everything my projects still need, what can I buy next, and when?**
 
-ProjectBudget consolidates the parts and tools your projects still need into one honest shopping backlog, then schedules purchases month by month against a discretionary budget you enter yourself. It is for makers, cyclists, homelabbers and DIYers running two or more projects with overlapping parts, self-hosted as one process on a laptop, NAS or small VPS. SQLite by default, PostgreSQL supported, no telemetry, your data exports to one JSON file.
+ProjectBudget keeps several projects' shopping lists honest against one budget. Each project says what it still needs, as a manifest in its repository or a list you type in; the backlog puts all of it in one priority queue; the timeline schedules the purchases month by month against a discretionary budget you enter yourself. It is for makers, cyclists, homelabbers and DIYers running two or more projects at once, self-hosted as one process on a laptop, NAS or small VPS. SQLite by default, PostgreSQL supported, no telemetry, your data exports to one JSON file.
 
 ## Quickstart
 
@@ -25,7 +25,7 @@ There are no default credentials: the app serves only `/health` until `init` has
 
 ## What it does
 
-- **Consolidated backlog.** Requirements from every project roll up per catalog item. Consumables add up; reusable tools count once for the largest single demand, or per project when marked exclusive. Stock and on-order quantities are shown, so you see the shortfall and what is already coming.
+- **One backlog across projects.** Every project's active requirements in one queue: priority first, then project, then the project's own order, which for a synced project is the manifest's file order. A part that several projects need shows once: consumables add up, reusable tools count once for the largest single demand or per project when marked exclusive. Stock and on-order quantities are shown, so you see the shortfall and what is already coming.
 - **Honest totals.** An item without a price is counted, flagged and never summed as zero. Totals are labelled lower bounds whenever anything is unpriced.
 - **Explainable timeline.** Enter the balance you have set aside, the date it was true, a protected reserve and a monthly contribution. Every month shows opening balance, contribution, purchases and closing balance, in strict priority order with no clever reordering, with an optimistic and a conservative date per item. Guards tell you when something is not fundable, beyond the horizon, blocked because the balance stays below the reserve, or priced from a stale estimate.
 - **Purchases and inventory.** Record what you ordered or bought line by line, receive it in parts, consume it against a project, or mark a timeline item purchased in one click. Spending visibly leaves the budget.
