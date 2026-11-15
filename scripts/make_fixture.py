@@ -36,7 +36,7 @@ def main() -> None:
             engine.dispose()
     TARGET.parent.mkdir(parents=True, exist_ok=True)
     TARGET.write_text(document.to_json(), encoding="utf-8", newline="\n")
-    print(f"Wrote {TARGET.relative_to(TARGET.parent.parent.parent)}")  # noqa: T201
+    print(f"Wrote {TARGET.relative_to(TARGET.parent.parent.parent)}")
 
 
 if __name__ == "__main__":
