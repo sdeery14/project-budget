@@ -222,6 +222,11 @@ class RequirementIn(Stripped):
     catalog_item_id: str | None = None
     item_text: str | None = Field(default=None, max_length=NAME_MAX_LENGTH)
     unit: str | None = Field(default=None, max_length=UNIT_MAX_LENGTH)
+    kind: ItemKind | None = Field(
+        default=None,
+        description="Kind of the catalog item that item_text creates when it is new; "
+        "consumable by default. An existing item keeps its kind.",
+    )
     sharing: Sharing = Sharing.SHARED
     notes: str = ""
 

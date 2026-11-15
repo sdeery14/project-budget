@@ -179,11 +179,13 @@ def add_requirement(
     item_text: Annotated[str, Form()] = "",
     catalog_item_id: Annotated[str, Form()] = "",
     unit: Annotated[str, Form()] = "",
+    kind: Annotated[ItemKind, Form()] = ItemKind.CONSUMABLE,
     priority: Annotated[int, Form()] = 2,
     sharing: Annotated[Sharing, Form()] = Sharing.SHARED,
     notes: Annotated[str, Form()] = "",
 ) -> Response:
-    """Pick an item from the catalog or type one; a typed name creates an unreviewed item."""
+    """Pick an item from the catalog or type one; a typed name creates an unreviewed item
+    of the chosen kind and unit (#18)."""
     chosen = catalog_item_id.strip() or None
     typed = item_text.strip() or None
     command = requirements.RequirementCreate(
@@ -193,6 +195,7 @@ def add_requirement(
         catalog_item_id=chosen,
         item_text=None if chosen else typed,
         unit=unit.strip() or None,
+        kind=kind,
         sharing=sharing,
         notes=notes,
     )
