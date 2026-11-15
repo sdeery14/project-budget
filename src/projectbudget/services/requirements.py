@@ -16,15 +16,17 @@ from sqlalchemy.orm import Session
 from projectbudget.domain.catalog import (
     ARCHIVE_REASON_MAX_LENGTH,
     Intent,
+    ItemKind,
+    MovementReason,
     Sharing,
     validate_priority,
     validate_quantity,
     validate_unit,
 )
 from projectbudget.domain.principal import Principal
-from projectbudget.persistence.models import CatalogItem, Requirement
+from projectbudget.persistence.models import CatalogItem, InventoryMovement, Requirement
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services.catalog import find_or_create_from_text, load_live_item
+from projectbudget.services.catalog import find_or_create_from_text, load_live_item, lock_item
 from projectbudget.services.clock import utcnow
 from projectbudget.services.guards import NotFoundError, require_write
 from projectbudget.services.projects import load_project
@@ -49,6 +51,19 @@ class InvalidArchiveReasonError(ValueError):
     """Too long, or given for an intent other than archived."""
 
 
+class QuantityBelowConsumedError(ValueError):
+    """The quantity cannot drop below what the project has already used from stock (#14)."""
+
+    def __init__(self, requirement_id: str, consumed: int, wanted: int) -> None:
+        super().__init__(
+            f"{consumed} already consumed against this requirement; the quantity cannot "
+            f"go below that ({wanted} given)"
+        )
+        self.requirement_id = requirement_id
+        self.consumed = consumed
+        self.wanted = wanted
+
+
 @dataclass(frozen=True, slots=True)
 class RequirementInfo:
     id: str
@@ -69,7 +84,12 @@ class RequirementInfo:
 
 @dataclass(frozen=True, slots=True)
 class RequirementCreate:
-    """Name the item by id or by free text, never both. ``unit`` is checked, not stored."""
+    """Name the item by id or by free text, never both. ``unit`` is checked, not stored.
+
+    ``kind`` is used only when ``item_text`` creates a new catalog item (#18): a list of
+    tools no longer needs a trip to each item page to make it reusable. An existing item
+    keeps its kind, whatever is given.
+    """
 
     project_id: str
     qty: int
@@ -77,6 +97,7 @@ class RequirementCreate:
     catalog_item_id: str | None = None
     item_text: str | None = None
     unit: str | None = None
+    kind: ItemKind | None = None
     sharing: Sharing = Sharing.SHARED
     notes: str = ""
 
@@ -125,10 +146,23 @@ def _resolve_item(
     if command.catalog_item_id is not None:
         item = load_live_item(db, command.catalog_item_id)
     elif command.item_text is not None:
-        item = find_or_create_from_text(db, command.item_text, unit=unit, now=now)
+        item = find_or_create_from_text(
+            db, command.item_text, unit=unit, now=now, kind=command.kind
+        )
     if unit is not None and unit != item.unit:
         raise UnitMismatchError(unit, item.unit)
     return item
+
+
+def _consumed_in(db: Session, requirement_id: str) -> int:
+    """Units already used from stock against the requirement (the inventory service's sum)."""
+    total = db.scalar(
+        select(func.coalesce(func.sum(InventoryMovement.delta_qty), 0)).where(
+            InventoryMovement.requirement_id == requirement_id,
+            InventoryMovement.reason == MovementReason.CONSUMED.value,
+        )
+    )
+    return -int(total or 0)
 
 
 def _next_sort_order(db: Session, project_id: str) -> int:
@@ -187,6 +221,12 @@ def update_requirement(
     with session_factory.begin() as db:
         row = load_requirement(db, requirement_id)
         if qty is not None:
+            # Consumption checks "qty - consumed" under the item lock; take the same lock
+            # here so a consumption in flight cannot land after this check read the total.
+            lock_item(db, row.catalog_item_id)
+            consumed = _consumed_in(db, requirement_id)
+            if qty < consumed:
+                raise QuantityBelowConsumedError(requirement_id, consumed, qty)
             row.qty = qty
         if priority is not None:
             row.priority = priority

@@ -189,6 +189,12 @@ class MovementOut(BaseModel):
     occurred_on: date
     note: str
     created_at: datetime
+    purchase_line_id: str | None = Field(
+        default=None, description="The purchase line a received movement came from."
+    )
+    purchase_id: str | None = Field(
+        default=None, description="The purchase a received movement came from."
+    )
 
     @classmethod
     def of(cls, info: MovementInfo) -> "MovementOut":
@@ -201,6 +207,8 @@ class MovementOut(BaseModel):
             occurred_on=info.occurred_on,
             note=info.note,
             created_at=info.created_at,
+            purchase_line_id=info.purchase_line_id,
+            purchase_id=info.purchase_id,
         )
 
 
@@ -214,6 +222,11 @@ class RequirementIn(Stripped):
     catalog_item_id: str | None = None
     item_text: str | None = Field(default=None, max_length=NAME_MAX_LENGTH)
     unit: str | None = Field(default=None, max_length=UNIT_MAX_LENGTH)
+    kind: ItemKind | None = Field(
+        default=None,
+        description="Kind of the catalog item that item_text creates when it is new; "
+        "consumable by default. An existing item keeps its kind.",
+    )
     sharing: Sharing = Sharing.SHARED
     notes: str = ""
 

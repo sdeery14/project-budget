@@ -261,16 +261,24 @@ def insert_item(db: Session, command: CatalogItemCreate, now: datetime) -> Catal
 
 
 def find_or_create_from_text(
-    db: Session, text: str, *, unit: str | None, now: datetime
+    db: Session,
+    text: str,
+    *,
+    unit: str | None,
+    now: datetime,
+    kind: ItemKind | None = None,
 ) -> CatalogItem:
-    """Resolve free text to the item with that slug, creating an unreviewed consumable if needed."""
+    """Resolve free text to the item with that slug, creating an unreviewed item if needed.
+
+    ``kind`` and ``unit`` describe the new item only; an existing item keeps its own (#18).
+    """
     name = validate_name(text)
     existing = find_live_by_slug(db, slugify(name))
     if existing is not None:
         return existing
     command = CatalogItemCreate(
         name=name,
-        kind=ItemKind.CONSUMABLE,
+        kind=ItemKind(kind) if kind is not None else ItemKind.CONSUMABLE,
         unit=unit if unit is not None else DEFAULT_UNIT,
         review_state=ReviewState.UNREVIEWED,
     )
@@ -419,6 +427,32 @@ def merge_items(
 # --- price estimates ---------------------------------------------------------------
 
 
+def insert_estimate(
+    db: Session,
+    item_id: str,
+    price: Money,
+    *,
+    as_of: date,
+    confidence: Confidence,
+    origin: EstimateOrigin,
+    now: datetime,
+) -> PriceEstimate:
+    """Write one estimate inside the caller's transaction; the caller has checked the price."""
+    row = PriceEstimate(
+        id=str(uuid.uuid4()),
+        catalog_item_id=item_id,
+        amount=price.amount,
+        currency=price.currency,
+        as_of=as_of,
+        confidence=Confidence(confidence).value,
+        origin=EstimateOrigin(origin).value,
+        created_at=now,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
 def add_estimate(
     session_factory: SessionFactory,
     principal: Principal,
@@ -437,18 +471,15 @@ def add_estimate(
     moment = now or utcnow()
     with session_factory.begin() as db:
         item = load_live_item(db, item_id)
-        row = PriceEstimate(
-            id=str(uuid.uuid4()),
-            catalog_item_id=item.id,
-            amount=command.price.amount,
-            currency=command.price.currency,
+        row = insert_estimate(
+            db,
+            item.id,
+            command.price,
             as_of=command.as_of or today(),
-            confidence=Confidence(command.confidence).value,
-            origin=EstimateOrigin(command.origin).value,
-            created_at=moment,
+            confidence=Confidence(command.confidence),
+            origin=EstimateOrigin(command.origin),
+            now=moment,
         )
-        db.add(row)
-        db.flush()
         return _estimate_info(row)
 
 

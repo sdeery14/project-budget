@@ -14,7 +14,7 @@ from projectbudget.domain.catalog import (
 )
 from projectbudget.domain.principal import Principal
 from projectbudget.persistence.session import SessionFactory
-from projectbudget.services import catalog, projects, requirements
+from projectbudget.services import catalog, inventory, projects, requirements
 from projectbudget.services.guards import ReadOnlyPrincipalError
 from projectbudget.services.projects import ProjectInfo
 
@@ -249,3 +249,76 @@ def test_read_only_principals_cannot_write(
     assert requirements.list_requirements(session_factory, read_only_principal, project.id) == [
         created
     ]
+
+
+def test_quantity_never_drops_below_what_was_consumed(
+    session_factory: SessionFactory, principal: Principal, project: ProjectInfo
+) -> None:
+    """#14: editing the quantity in place must not orphan consumption already recorded."""
+    created = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(project_id=project.id, qty=4, item_text="Hinge"),
+    )
+    inventory.adjust(session_factory, principal, created.catalog_item_id, 3, note="found")
+    inventory.consume(session_factory, principal, created.id, 2)
+
+    with pytest.raises(requirements.QuantityBelowConsumedError) as refused:
+        requirements.update_requirement(
+            session_factory, principal, created.id, requirements.RequirementUpdate(qty=1)
+        )
+    assert refused.value.consumed == 2
+    assert "2 already consumed" in str(refused.value)
+    assert requirements.get_requirement(session_factory, principal, created.id).qty == 4
+
+    # Down to exactly what was used is fine, and so is any other field on its own.
+    trimmed = requirements.update_requirement(
+        session_factory,
+        principal,
+        created.id,
+        requirements.RequirementUpdate(qty=2, priority=1, sharing=Sharing.EXCLUSIVE, notes=" x "),
+    )
+    assert (trimmed.qty, trimmed.priority, trimmed.sharing, trimmed.notes) == (
+        2,
+        1,
+        Sharing.EXCLUSIVE,
+        "x",
+    )
+
+
+def test_free_text_can_create_a_reusable_item_but_never_changes_an_existing_one(
+    session_factory: SessionFactory, principal: Principal, project: ProjectInfo
+) -> None:
+    """#18: a list of tools is typed in once, each as reusable, without a trip to its page."""
+    created = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(
+            project_id=project.id, qty=1, item_text="Torque wrench", kind=ItemKind.REUSABLE
+        ),
+    )
+    wrench = catalog.get_item(session_factory, principal, created.catalog_item_id)
+    assert wrench.kind is ItemKind.REUSABLE
+    assert wrench.review_state is ReviewState.UNREVIEWED
+
+    # The same text again with another kind resolves to the existing item unchanged.
+    again = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(
+            project_id=project.id, qty=1, item_text="torque wrench", kind=ItemKind.CONSUMABLE
+        ),
+    )
+    assert again.catalog_item_id == wrench.id
+    assert catalog.get_item(session_factory, principal, wrench.id).kind is ItemKind.REUSABLE
+
+    # Choosing by id ignores the kind entirely.
+    chosen = requirements.add_requirement(
+        session_factory,
+        principal,
+        requirements.RequirementCreate(
+            project_id=project.id, qty=1, catalog_item_id=wrench.id, kind=ItemKind.CONSUMABLE
+        ),
+    )
+    assert chosen.catalog_item_id == wrench.id
+    assert len(catalog.list_items(session_factory, principal)) == 1

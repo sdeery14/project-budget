@@ -1,4 +1,4 @@
-"""Projects and their requirements: list, detail, add, change intent, consume.
+"""Projects and their requirements: list, detail, edit, add, change intent, consume.
 
 JSON twins: ``/api/v1/projects`` and ``/api/v1/requirements``.
 """
@@ -6,14 +6,14 @@ JSON twins: ``/api/v1/projects`` and ``/api/v1/requirements``.
 from dataclasses import dataclass
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from projectbudget.domain.catalog import Intent, ItemKind, Sharing
 from projectbudget.domain.principal import Principal
 from projectbudget.services import catalog, inventory, projects, requirements, sync
 from projectbudget.services.catalog import CatalogItemInfo
-from projectbudget.services.errors import USER_ERRORS
+from projectbudget.services.errors import CONFLICT_ERRORS, USER_ERRORS
 from projectbudget.services.requirements import RequirementInfo
 from projectbudget.web.auth import Owner, is_htmx, session_factory
 from projectbudget.web.templates import render
@@ -130,6 +130,33 @@ def project_page(request: Request, principal: Owner, project_id: str) -> HTMLRes
     return render(request, "project.html", _detail_context(request, principal, project_id))
 
 
+@router.post(PROJECTS_PATH + "/{project_id}", response_class=HTMLResponse)
+def update_project(
+    request: Request,
+    principal: Owner,
+    project_id: str,
+    notes: Annotated[str, Form()] = "",
+    name: Annotated[str | None, Form()] = None,
+) -> Response:
+    """Rename a project and edit its notes (#13). A synced project's form sends no name:
+    the manifest owns it (ADR-007), so the page only lets the owner change the notes."""
+    try:
+        projects.update_project(
+            session_factory(request),
+            principal,
+            project_id,
+            projects.ProjectUpdate(name=name, notes=notes),
+        )
+    except USER_ERRORS as exc:
+        return render(
+            request,
+            "project.html",
+            _detail_context(request, principal, project_id, project_error=str(exc)),
+            status_code=422,
+        )
+    return RedirectResponse(f"{PROJECTS_PATH}/{project_id}", status_code=303)
+
+
 @router.post(PROJECTS_PATH + "/{project_id}/archive")
 def archive_project(
     request: Request,
@@ -152,11 +179,13 @@ def add_requirement(
     item_text: Annotated[str, Form()] = "",
     catalog_item_id: Annotated[str, Form()] = "",
     unit: Annotated[str, Form()] = "",
+    kind: Annotated[ItemKind, Form()] = ItemKind.CONSUMABLE,
     priority: Annotated[int, Form()] = 2,
     sharing: Annotated[Sharing, Form()] = Sharing.SHARED,
     notes: Annotated[str, Form()] = "",
 ) -> Response:
-    """Pick an item from the catalog or type one; a typed name creates an unreviewed item."""
+    """Pick an item from the catalog or type one; a typed name creates an unreviewed item
+    of the chosen kind and unit (#18)."""
     chosen = catalog_item_id.strip() or None
     typed = item_text.strip() or None
     command = requirements.RequirementCreate(
@@ -166,6 +195,7 @@ def add_requirement(
         catalog_item_id=chosen,
         item_text=None if chosen else typed,
         unit=unit.strip() or None,
+        kind=kind,
         sharing=sharing,
         notes=notes,
     )
@@ -207,6 +237,65 @@ def set_intent(
     return _row_or_redirect(request, principal, info)
 
 
+async def submitted_fields(request: Request) -> frozenset[str]:
+    """The names the form body carries. FastAPI hands an empty text field to the endpoint as
+    its default, the same as a missing one; this tells "cleared" from "not on this form"."""
+    return frozenset((await request.form()).keys())
+
+
+def _row_error(
+    request: Request, principal: Principal, requirement_id: str, error: str, status_code: int
+) -> Response:
+    """The row again with the message inside it over htmx; the whole page otherwise."""
+    factory = session_factory(request)
+    info = requirements.get_requirement(factory, principal, requirement_id)
+    if is_htmx(request):
+        return render(
+            request,
+            "partials/requirement_row.html",
+            {"row": _row(request, principal, info), "error": error},
+            status_code=status_code,
+        )
+    return render(
+        request,
+        "project.html",
+        _detail_context(request, principal, info.project_id, error=error),
+        status_code=status_code,
+    )
+
+
+@router.post("/requirements/{requirement_id}/edit")
+def edit_requirement(
+    request: Request,
+    principal: Owner,
+    requirement_id: str,
+    sent: Annotated[frozenset[str], Depends(submitted_fields)],
+    qty: Annotated[int | None, Form()] = None,
+    priority: Annotated[int | None, Form()] = None,
+    sharing: Annotated[Sharing | None, Form()] = None,
+    notes: Annotated[str | None, Form()] = None,
+) -> Response:
+    """Change quantity, priority, sharing or notes in place (#14); the JSON twin is PATCH.
+
+    A field the form did not send keeps its value: a manifest-managed row's form sends only
+    sharing and notes, the two fields the owner keeps on such a row (ADR-007). A notes field
+    that was sent empty clears the notes.
+    """
+    if notes is None and "notes" in sent:
+        notes = ""
+    command = requirements.RequirementUpdate(
+        qty=qty, priority=priority, sharing=sharing, notes=notes
+    )
+    try:
+        info = requirements.update_requirement(
+            session_factory(request), principal, requirement_id, command
+        )
+    except USER_ERRORS as exc:
+        status = 409 if isinstance(exc, CONFLICT_ERRORS) else 422
+        return _row_error(request, principal, requirement_id, str(exc), status)
+    return _row_or_redirect(request, principal, info)
+
+
 @router.post("/requirements/{requirement_id}/consume")
 def consume(
     request: Request,
@@ -219,19 +308,6 @@ def consume(
     try:
         inventory.consume(factory, principal, requirement_id, qty, note=note)
     except USER_ERRORS as exc:
-        info = requirements.get_requirement(factory, principal, requirement_id)
-        if is_htmx(request):
-            return render(
-                request,
-                "partials/requirement_row.html",
-                {"row": _row(request, principal, info), "error": str(exc)},
-                status_code=422,
-            )
-        return render(
-            request,
-            "project.html",
-            _detail_context(request, principal, info.project_id, error=str(exc)),
-            status_code=422,
-        )
+        return _row_error(request, principal, requirement_id, str(exc), 422)
     info = requirements.get_requirement(factory, principal, requirement_id)
     return _row_or_redirect(request, principal, info)

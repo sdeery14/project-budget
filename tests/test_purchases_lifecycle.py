@@ -213,7 +213,8 @@ def test_backlog_shows_partial_receipt_as_on_order_and_stock(
     )
     order = _ordered(session_factory, principal, (clamp.id, 2, "12.50"))
     purchases.receive_line(session_factory, principal, order.lines[0].id, 1)
-    (row,) = backlog.get_backlog(session_factory, principal).unpriced
+    # The receipt priced the clamp at what was paid (#24), so the row is in the main table.
+    (row,) = backlog.get_backlog(session_factory, principal).rows
     assert (row.needed, row.on_hand, row.gross_shortfall, row.on_order, row.net_shortfall) == (
         3,
         1,
@@ -221,3 +222,4 @@ def test_backlog_shows_partial_receipt_as_on_order_and_stock(
         1,
         1,
     )
+    assert row.unit_price == usd("12.50")

@@ -24,7 +24,7 @@ from projectbudget.domain.catalog import (
     validate_quantity,
 )
 from projectbudget.domain.principal import Principal
-from projectbudget.persistence.models import InventoryMovement
+from projectbudget.persistence.models import InventoryMovement, PurchaseLine
 from projectbudget.persistence.session import SessionFactory
 from projectbudget.services.catalog import confirm, load_live_item, lock_item
 from projectbudget.services.clock import today, utcnow
@@ -84,9 +84,11 @@ class MovementInfo:
     occurred_on: date
     note: str
     created_at: datetime
+    purchase_id: str | None = None
+    """The purchase a ``received`` movement came from, so a page can link it (#24)."""
 
 
-def _info(row: InventoryMovement) -> MovementInfo:
+def _info(row: InventoryMovement, *, purchase_id: str | None = None) -> MovementInfo:
     return MovementInfo(
         id=row.id,
         catalog_item_id=row.catalog_item_id,
@@ -97,6 +99,7 @@ def _info(row: InventoryMovement) -> MovementInfo:
         occurred_on=row.occurred_on,
         note=row.note,
         created_at=row.created_at,
+        purchase_id=purchase_id,
     )
 
 
@@ -249,13 +252,21 @@ def consume(
         return _info(row)
 
 
+def receipt_note(ordered_on: date, vendor: str) -> str:
+    """What a received movement says about where the stock came from (#24)."""
+    note = f"Purchase {ordered_on.isoformat()}"
+    return f"{note} from {vendor}" if vendor else note
+
+
 def record_receipt(
     db: Session,
     *,
     item_id: str,
     qty: int,
+    purchase_id: str,
     purchase_line_id: str,
     occurred_on: date,
+    note: str,
     now: datetime,
 ) -> MovementInfo:
     """Put a received purchase line into stock, inside the caller's (item-locked) transaction."""
@@ -266,11 +277,11 @@ def record_receipt(
         reason=MovementReason.RECEIVED.value,
         requirement_id=None,
         occurred_on=occurred_on,
-        note="",
+        note=_clean_note(note),
         now=now,
         purchase_line_id=purchase_line_id,
     )
-    return _info(row)
+    return _info(row, purchase_id=purchase_id)
 
 
 def on_hand(session_factory: SessionFactory, principal: Principal, item_id: str) -> int:
@@ -287,11 +298,12 @@ def consumed(session_factory: SessionFactory, principal: Principal, requirement_
 def list_movements(
     session_factory: SessionFactory, principal: Principal, item_id: str
 ) -> list[MovementInfo]:
-    """Newest first."""
+    """Newest first. A received movement carries the id of the purchase it came from."""
     with session_factory() as db:
         live_id = load_live_item(db, item_id).id
-        rows = db.scalars(
-            select(InventoryMovement)
+        rows = db.execute(
+            select(InventoryMovement, PurchaseLine.purchase_id)
+            .outerjoin(PurchaseLine, PurchaseLine.id == InventoryMovement.purchase_line_id)
             .where(InventoryMovement.catalog_item_id == live_id)
             .order_by(
                 InventoryMovement.occurred_on.desc(),
@@ -299,4 +311,4 @@ def list_movements(
                 InventoryMovement.id,
             )
         ).all()
-        return [_info(row) for row in rows]
+        return [_info(row, purchase_id=purchase_id) for row, purchase_id in rows]

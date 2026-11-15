@@ -6,12 +6,14 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Added
 
+- A project's name and notes can be edited on its page, and a requirement's quantity, priority, sharing and notes on its row, instead of through the API or by cancelling and re-adding (#13, #14). A quantity is refused below what the project has already consumed (`409` on `PATCH /api/v1/requirements/{id}` too). On a synced project the forms offer only what the manifest does not own: the notes, and a row's sharing and notes.
 - A favicon: the tab has an icon and the browser console no longer logs a 404 for `/favicon.ico` on every page (#16).
 - `projectbudget reset [--yes]`: empty the workspace in one transaction, keeping the owner, sessions, API tokens and currency, instead of deleting the database file and running `init` again (#33).
 - An Account page (`/settings/account`) to change the owner's password with the current one, signing every other session out, and a `projectbudget passwd` command on the host for a forgotten password (#12). Neither is reachable with an API token.
 - `PROJECTBUDGET_GITHUB_TOKEN`: one read-only token for every private GitHub sync source, read from the environment or `.env` and never stored; a source's own token variable overrides it. The operations guide has the fine-grained token recipe and where the token goes for `uvx`, Docker and Compose (#30).
 - A source's branch, path, token variable and CSV project id can be changed on the source page and with `PATCH /api/v1/sync/sources/{id}`; the source page says which token it will use (#29, #31).
 - A sync source can be attached to an existing project (chosen on the Add source form or with `project_id` on the API). On the first apply, hand-entered requirements whose catalog item the manifest also names are adopted, keeping intent, sharing, notes and consumption; the plan lists adoptions as their own action and warns when a source with no project chosen would create a second project with the same name (#26, ADR-012).
+- The Add a requirement form has a Kind field (consumable or reusable), and `POST /api/v1/requirements` takes `kind`, used only when the typed name creates a new catalog item; a list of tools no longer needs a trip to each item page to make it reusable (#18).
 - Browser smoke tests (`tests/e2e`, Playwright, Chromium) that sign in, run the core journey, check destructive buttons ask first and fail on console errors, at desktop and phone width; CI runs them as "UI smoke (Playwright)".
 
 ### Changed
@@ -21,6 +23,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 - The backlog's money figures (line totals and "Still to buy") count only what is not yet on order, the same quantity the timeline buys, so the two pages no longer disagree by the value of open orders. A "Committed on order" tile shows the money on every open order at the purchases' prices, whether or not its item still shows, and a fully ordered row carries an "on order" badge and a 0.00 line total, with or without an estimate, until it is received (#25, ADR-012).
 - Default backlog and timeline order within a priority tier is now by project (creation order) and then each project's own requirement order instead of alphabetical; a manifest sets that order to its file order on every apply, so the file's order is the purchase order (#34, ADR-012). The owner's explicit backlog order still wins.
 - Review state now has a visible purpose: the catalog page says that confirming an item stops a manifest from changing its kind or unit, offers a one-click Confirm on each unreviewed row and a filter for unreviewed items (`GET /api/v1/catalog/items?review_state=unreviewed`), and the app confirms an item itself when the owner edits it, counts its stock or buys it. The item page's Review select is gone; saving the form, or "Confirm as is", confirms the item (#36, ADR-012).
+- Receiving a purchase now records the price paid as a `purchase`-origin estimate, dated the day it arrived, so the current price follows what was actually paid; and a received stock movement says which purchase it came from ("Purchase 2026-11-09 from Tool Shop"), linked on the item page, with `purchase_id` and `purchase_line_id` on the movements API (#24).
 
 ### Fixed
 

@@ -30,6 +30,7 @@ def add_requirement(request: Request, principal: Owner, body: RequirementIn) -> 
             catalog_item_id=body.catalog_item_id,
             item_text=body.item_text,
             unit=body.unit,
+            kind=body.kind,
             sharing=body.sharing,
             notes=body.notes,
         ),
