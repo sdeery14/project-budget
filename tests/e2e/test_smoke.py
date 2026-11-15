@@ -308,8 +308,11 @@ def test_project_and_requirement_can_be_edited_in_place(
     row = page.get_by_role("row", name=re.compile("Bench dog"))
     row.get_by_label("Quantity to consume").fill("2")
     row.get_by_role("button", name="Consume").click()
+    # Wait for the swapped row: the on-hand cell showed 2 before the consume, so a check
+    # for "2" anywhere in the row would pass early and the swap would then close the form.
     row = page.get_by_role("row", name=re.compile("Bench dog"))
-    expect(row).to_contain_text("2")
+    expect(row.locator("td[data-label=Consumed]")).to_have_text("2")
+    expect(row.locator("td[data-label='On hand']")).to_have_text("0")
     row.get_by_text("Edit", exact=True).click()
     page.evaluate("() => document.querySelector('#requirements input[name=qty]').min = '0'")
     row.get_by_label(re.compile(r"^Qty")).fill("1")
