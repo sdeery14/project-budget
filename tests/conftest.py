@@ -24,6 +24,26 @@ from projectbudget.settings import Settings, sqlite_url
 from projectbudget.web.app import create_app
 
 TEST_DATABASE_URL_ENV = "PROJECTBUDGET_TEST_DATABASE_URL"
+E2E_DIR = Path(__file__).resolve().parent / "e2e"
+
+
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Collect the browser tests only when ``tests/e2e`` (or a file in it) is named.
+
+    The Playwright session fixture keeps an event loop running in the main thread until the
+    session ends, so any test collected after it that starts a loop of its own fails with
+    "Already running asyncio in this thread". ``uv run pytest`` therefore stays unit-only and
+    ``uv run pytest tests/e2e`` runs the browser tests, which is how CI runs them too.
+    """
+    if collection_path != E2E_DIR:
+        return None
+    root = Path(str(config.invocation_params.dir))
+    for arg in config.invocation_params.args:
+        named = (root / str(arg).split("::", 1)[0]).resolve()
+        if named == E2E_DIR or E2E_DIR in named.parents:
+            return False
+    return True
+
 
 OWNER_USERNAME = "owner"
 OWNER_PASSWORD = "correct horse battery staple"
