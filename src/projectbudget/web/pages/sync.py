@@ -44,6 +44,7 @@ def _detail_context(
     return {
         "source": sync.get_source(factory, principal, source_id),
         "runs": sync.list_runs(factory, principal, source_id),
+        "last_applied": sync.last_applied_run(factory, principal, source_id),
         "default_token_set": app_settings(request).effective_github_token is not None,
         "preview": None,
         "result": None,

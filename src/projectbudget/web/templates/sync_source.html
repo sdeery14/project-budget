@@ -60,7 +60,7 @@
 
   {% if preview %}
     {% if preview.noop %}
-    <p class="alert" role="status">Same content as the last applied run (<code>{{ preview.fetched.content_hash[:12] }}</code>): nothing to do.</p>
+    <p class="alert" role="status">Same content as the run applied {% if last_applied %}{{ last_applied.created_at | local }} ({{ tz_label }}){% if last_applied.revision %} at revision <code>{{ last_applied.revision[:12] }}</code>{% endif %}{% else %}last{% endif %}: nothing to do.</p>
     {% else %}
     {% set plan = preview.plan %}
     <p class="muted">{{ preview.fetched.description }} · estimates dated {{ preview.fetched.as_of.isoformat() }} ·
