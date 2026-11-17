@@ -46,7 +46,7 @@ One loop. Projects say what they need, the budget says what there is, and the tw
 
 Then repeat: edit the manifest or the project as plans change, sync again, and the queue moves with it. Nothing is deleted by a sync; items that leave a manifest are archived and keep their purchase history.
 
-Planning with a coding agent? [docs/agents/](docs/agents/) holds an `AGENTS.md` section and a Claude Code skill to copy into a project repository, so Claude Code, Codex or ChatGPT write the manifest for you and check it with `projectbudget manifest validate` before you sync it.
+Planning with a coding agent? [docs/agents/](docs/agents/) holds an `AGENTS.md` section and a Claude Code skill to copy into a project repository, so Claude Code, Codex or ChatGPT write the manifest for you and check it with `projectbudget manifest validate` before you sync it. `projectbudget mcp` gives an agent on the same machine live access through the JSON API, with a token you can make read-only and revoke; the setup is in the [operations guide](docs/operations.md#mcp-server).
 
 ## What it does
 
@@ -71,6 +71,7 @@ Planning with a coding agent? [docs/agents/](docs/agents/) holds an `AGENTS.md` 
 | `projectbudget reset [--yes]` | empty the workspace, keeping the owner, sessions, tokens and currency |
 | `projectbudget sync SOURCE_ID [--dry-run] [--force]` | pull a manifest and apply its plan |
 | `projectbudget manifest validate PATH [--project-id ID] [--format json]` | check a `project-budget.yaml` (or a CSV) with the sync parser, no server needed; exit 1 lists every problem with its line |
+| `projectbudget mcp [--url URL]` | serve the Model Context Protocol on stdio for a coding agent, as a client of the JSON API with the token in `PROJECTBUDGET_API_TOKEN` |
 | `projectbudget db upgrade\|downgrade\|current` | migrations |
 
 ## Design and security

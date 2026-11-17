@@ -57,4 +57,4 @@ items:
 
 ## Reading the owner's data
 
-If a ProjectBudget server is reachable and the owner has given you an API token, the JSON API under `/api/v1` has the backlog, timeline, catalog and purchases; the OpenAPI document is at `/api/v1/openapi.json`. Otherwise ask the owner for the export JSON from the app's Data page: it holds every project, item, price, stock level, purchase and open order.
+If the ProjectBudget MCP server is configured, use its tools: `get_backlog`, `get_timeline`, `search_catalog` and `get_catalog_item` say what is owned, priced and on order, and `preview_sync` shows the plan this file would make. If a server is reachable and the owner has given you an API token instead, the JSON API under `/api/v1` has the same data; the OpenAPI document is at `/api/v1/openapi.json`. Otherwise ask the owner for the export JSON from the app's Data page: it holds every project, item, price, stock level, purchase and open order.

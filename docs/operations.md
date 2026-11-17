@@ -121,3 +121,49 @@ Restart the server after setting or changing the variable; it is read from the p
 ## Sync sources on disk
 
 File and CSV sources read only from the import directory. Put manifests there (or in subfolders) and name them by relative path when adding a source, for example `heater/project-budget.yaml`. The schema is `docs/manifest.schema.json`; the guide is `docs/manifest.md`.
+
+## MCP server
+
+`projectbudget mcp` serves the [Model Context Protocol](https://modelcontextprotocol.io) on stdio for a coding agent on the same machine (Claude Code, Codex CLI, or any MCP client). It is a thin client of the JSON API: every tool calls one `/api/v1` endpoint with an API token and returns that endpoint's JSON, so the agent sees exactly what a script with the same token would, and the server adds no permissions of its own (ADR-013). A read-only token gives a read-only server: the API refuses its writes with 403 and the tool reports why.
+
+Create the token on the Tokens page (read-only unless the agent should record purchases and change requirements), then give it to the agent's MCP configuration as `PROJECTBUDGET_API_TOKEN`. The token is read from the environment only; there is no flag for it. `PROJECTBUDGET_URL` (or `--url`) names the server, default `http://127.0.0.1:8000`.
+
+Claude Code (`.mcp.json` in the project, or `claude mcp add`):
+
+```json
+{
+  "mcpServers": {
+    "projectbudget": {
+      "command": "uvx",
+      "args": ["projectbudget", "mcp"],
+      "env": { "PROJECTBUDGET_API_TOKEN": "pb_...", "PROJECTBUDGET_URL": "http://127.0.0.1:8000" }
+    }
+  }
+}
+```
+
+Codex CLI (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.projectbudget]
+command = "uvx"
+args = ["projectbudget", "mcp"]
+env = { PROJECTBUDGET_API_TOKEN = "pb_...", PROJECTBUDGET_URL = "http://127.0.0.1:8000" }
+```
+
+Rather than pasting the token into a file other tools read, most clients accept `"env": { "PROJECTBUDGET_API_TOKEN": "${PROJECTBUDGET_API_TOKEN}" }` or inherit it from the shell; use that where it is offered. Revoke the token on the Tokens page to cut the agent off.
+
+The tools, each one endpoint:
+
+| Tool | Endpoint | Needs |
+| --- | --- | --- |
+| `list_projects`, `get_project`, `list_requirements` | `GET /projects`, `/projects/{id}`, `/projects/{id}/requirements` | read |
+| `get_backlog` | `GET /backlog` | read |
+| `get_timeline` | `GET /forecast` | read |
+| `get_catalog_item`, `search_catalog` | `GET /catalog/items/{id}`, `/catalog/items` | read |
+| `add_requirement`, `update_requirement` | `POST /requirements`, `PATCH /requirements/{id}` | write |
+| `consume` | `POST /requirements/{id}/consume` | write |
+| `record_purchase`, `receive_line` | `POST /purchases`, `/purchases/{id}/lines/{line_id}/receive` | write |
+| `list_sync_sources`, `preview_sync`, `apply_sync` | `GET /sync/sources`, `POST /sync/sources/{id}/preview`, `/apply` | read, write, write |
+
+No tool manages tokens, imports or exports the workspace, or changes the budget plan; those stay in the browser. The server is stdio only: nothing listens on a port, and exposing it over HTTP, OAuth for agents, scoped tokens and an audit log are deferred items that need their own ADR.

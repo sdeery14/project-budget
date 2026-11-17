@@ -1,4 +1,4 @@
-"""``projectbudget`` CLI: ``init``, ``run``, ``export``, ``import``, ``sync``, ``backup``, ``db ...``, ``version``.
+"""``projectbudget`` CLI: ``init``, ``run``, ``export``, ``import``, ``sync``, ``backup``, ``mcp``, ``db ...``, ``version``.
 
 The container entrypoint runs ``db upgrade`` and then ``run`` (ADR-010).
 """
@@ -14,7 +14,7 @@ import typer
 import uvicorn
 from pydantic import ValidationError
 
-from projectbudget import __version__, localtime
+from projectbudget import __version__, localtime, mcp_server
 from projectbudget.adapters import manifest as manifest_adapter
 from projectbudget.adapters.export_format import InvalidDocumentError, parse_document
 from projectbudget.adapters.sources import SourceFetchError
@@ -407,6 +407,33 @@ def backup_cmd(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     typer.echo(f"Backup written to {written}")
+
+
+@app.command("mcp")
+def mcp_cmd(
+    url: Annotated[
+        str,
+        typer.Option(
+            "--url",
+            envvar=mcp_server.URL_ENV,
+            help="Base URL of the running ProjectBudget server.",
+            show_default=True,
+        ),
+    ] = mcp_server.DEFAULT_URL,
+) -> None:
+    """Serve the Model Context Protocol on stdio as a client of /api/v1 (ADR-013).
+
+    The API token comes only from PROJECTBUDGET_API_TOKEN; a read-only token gives a
+    read-only server. Nothing but the protocol is written to stdout.
+    """
+    token = os.environ.get(mcp_server.TOKEN_ENV, "").strip()
+    if not token:
+        typer.echo(
+            f"{mcp_server.TOKEN_ENV} is not set; create a token on the Tokens page and export it",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    mcp_server.serve_stdio(url, token)
 
 
 @manifest_app.command("validate")
