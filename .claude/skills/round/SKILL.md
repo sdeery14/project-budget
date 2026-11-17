@@ -46,7 +46,9 @@ These are not judgment calls. Breaking one ends the round for that issue, with a
 
 1. **Branch** from fresh `main`: `issue-<n>-<short-slug>`.
 2. **Implement** with tests, the way the repo's notes say: service first, then page and API
-   twin, template last. Add the `CHANGELOG.md` line under Unreleased with the issue number.
+   twin, template last. Add the `CHANGELOG.md` line under Unreleased with the issue number,
+   at the *end* of its Added or Fixed list rather than the top: two PRs that both insert at
+   the top conflict on every merge, two that append rarely do.
 3. **Verify locally** before pushing: `uv run ruff check --fix . && uv run ruff format .`,
    `uv run mypy`, `uv run pytest`. If a template or `app.css` changed, run the relevant
    `tests/e2e` tests and look at the page in a browser at desktop and 320 px.
@@ -74,6 +76,13 @@ These are not judgment calls. Breaking one ends the round for that issue, with a
    - If the PR is auto-merge eligible under the hard limits:
      `gh pr merge <pr> --auto --squash --delete-branch`, then
      `uv run python scripts/pr_wait.py <pr> --until-merged`. Protection re-checks everything.
+     Protection also requires the branch to be up to date, so after any other merge the armed
+     PR stalls. Poll `gh pr view <pr> --json state,mergeStateStatus`: on `BEHIND`, run
+     `gh api -X PUT repos/<owner>/<repo>/pulls/<pr>/update-branch` (a merge commit, never a
+     force push) and wait again; on `DIRTY`, `git fetch origin && git merge origin/main`
+     locally (the polling commands never refresh the remote-tracking ref), resolve
+     `CHANGELOG.md` by keeping both lines, push, comment `@codex review` so the state block
+     covers the new head, and wait again. Neither counts as a fix round.
    - Otherwise label `needs-human` and comment that it is green, reviewed and waiting for the
      owner's merge.
 7. `git checkout main && git pull` before the next issue, so each branch starts from the

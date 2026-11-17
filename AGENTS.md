@@ -11,7 +11,7 @@ uv sync --group dev --group e2e
 uv run ruff check --fix . && uv run ruff format .
 uv run mypy
 uv run pytest                 # SQLite; set PROJECTBUDGET_TEST_DATABASE_URL for PostgreSQL
-uv run pytest tests/e2e       # Chromium smoke tests, desktop and 320 px
+uv run pytest tests/e2e       # Chromium smoke tests, desktop and 320 px; not part of a plain run
 ```
 
 CI runs all of these on both databases. A PR merges only when every check is green and every review thread is resolved.

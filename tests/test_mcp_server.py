@@ -43,6 +43,8 @@ def run[T](scenario: Callable[[], Coroutine[Any, Any, T]]) -> T:
 
     The Playwright session fixture under ``tests/e2e`` keeps an event loop running in the main
     thread for the rest of the session, so ``anyio.run`` there would refuse to start another.
+    A plain run no longer collects those tests (``tests/conftest.py``), but this keeps the
+    scenarios independent of what else was collected.
     """
     outcome: list[T] = []
     failure: list[BaseException] = []
