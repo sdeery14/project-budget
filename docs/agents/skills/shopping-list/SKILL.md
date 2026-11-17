@@ -7,6 +7,28 @@ description: Build or update this project's shopping list as the project-budget.
 
 Write the project's needs into `project-budget.yaml` at the repository root, in manifest v1, and validate it. Do not create lists anywhere else; ProjectBudget reads this file and nothing else.
 
+The schema is <https://github.com/sdeery14/project-budget/blob/main/docs/manifest.schema.json> and the guide is <https://github.com/sdeery14/project-budget/blob/main/docs/manifest.md>. The shape:
+
+```yaml
+version: 1
+project:
+  id: garden-gate            # stable slug, required; never rename it
+  name: Garden gate          # optional
+items:
+  - id: gate-hinge-set       # stable slug, unique in the file; never rename it
+    name: Gate hinge set
+    qty: 1
+    unit: set                # default each
+    priority: 1              # 1 most urgent .. 3, default 2
+    estimate: { amount: "24.00", currency: USD }   # quoted decimal string, optional
+  - id: post-level
+    name: Post level
+    qty: 1
+    kind: reusable           # consumable (default) or reusable
+    sharing: shared          # reusable only: shared (default) or exclusive
+    catalog: post-level      # optional: reuse an existing catalog item by slug
+```
+
 ## Procedure
 
 1. Read what the project is: the README, open issues, any plan or design notes, and the current `project-budget.yaml` if there is one. Work out what has to be bought, in which quantities, and what order the work needs them in.
@@ -29,7 +51,9 @@ Write the project's needs into `project-budget.yaml` at the repository root, in 
 - `version: 1`; `project.id` and every item `id` are slugs (lower-case letters, digits, single hyphens, 1 to 100 characters) and unique within the file.
 - `qty` is a whole number of at least 1; `priority` is 1 to 3; `name` is at most 200 characters; `unit` at most 30.
 - `estimate.amount` is a quoted decimal string with at most two decimals; a YAML number is rejected.
-- Unknown fields are errors. `kind` and `unit` only apply when the item is new to the catalog.
+- Unknown fields are errors.
+- Two items may point at the same catalog item, but if they define its kind or unit differently the later one is rejected when the plan is made.
+- An item that reuses an existing catalog item must carry the catalog's `kind` and `unit` (the defaults are `consumable` and `each`). A mismatch is not a validation error: it rejects that one item when the plan is made, so the requirement never arrives. A manifest may change kind or unit only on an item it created that the owner has not yet confirmed, edited, counted or bought.
 
 ## Reading the owner's data
 

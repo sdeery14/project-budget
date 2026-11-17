@@ -79,18 +79,35 @@ def test_stated_defaults_match_the_item_model(name: str) -> None:
     assert "`shared`" in text
 
 
-def test_the_section_example_parses_as_written() -> None:
-    block = re.search(r"```yaml\n(.*?)```", TEXTS[SECTION.name], re.S)
-    assert block is not None
+SCHEMA_URL = "https://github.com/sdeery14/project-budget/blob/main/docs/manifest.schema.json"
+GUIDE_URL = "https://github.com/sdeery14/project-budget/blob/main/docs/manifest.md"
+
+
+@pytest.mark.parametrize("name", sorted(TEXTS))
+def test_each_text_links_the_schema_and_guide_and_its_example_parses(name: str) -> None:
+    """Either file may be copied alone, so each links the schema and shows the whole shape."""
+    text = TEXTS[name]
+    assert SCHEMA_URL in text, name
+    assert GUIDE_URL in text, name
+    block = re.search(r"```yaml\n(.*?)```", text, re.S)
+    assert block is not None, name
     manifest = parse_yaml(block.group(1))
     assert manifest.project_id == "garden-gate"
-    assert [item.id for item in manifest.items] == [
-        "gate-hinge-set",
-        "carriage-bolts",
-        "post-level",
-    ]
+    assert manifest.items[0].id == "gate-hinge-set"
     assert manifest.items[0].estimate is not None
     assert manifest.items[0].estimate.amount == "24.00"
+    assert any(item.catalog for item in manifest.items), name
+
+
+def test_two_items_may_share_a_catalog_item_but_not_an_id() -> None:
+    """The kit says duplicate ids are rejected and shared catalog slugs are not (the plan decides)."""
+    shared = (
+        "  - {id: front-bolts, name: M8 carriage bolt 80 mm, qty: 8, catalog: m8-carriage-bolt-80}\n"
+        "  - {id: back-bolts, name: M8 carriage bolt 80 mm, qty: 4, catalog: m8-carriage-bolt-80}\n"
+    )
+    manifest = parse_yaml(_manifest(shared))
+    assert [item.catalog for item in manifest.items] == ["m8-carriage-bolt-80"] * 2
+    _rejects(shared.replace("back-bolts", "front-bolts"), "duplicate")
 
 
 def test_rules_the_kit_states_are_rules_the_parser_enforces() -> None:
