@@ -4,8 +4,21 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-17
+
+The first release: the complete V1 scope of RFC v3, self-hosted as one process, after two rounds of owner acceptance testing on real data.
+
 ### Added
 
+- Single-owner login with Argon2id passwords, database-backed sessions, CSRF protection, a database-backed login rate limit, security headers with a strict Content Security Policy, and hashed, revocable API tokens (read-only or read-write).
+- Projects, catalog items (consumable or reusable, with a stable slug and unit), requirements with priority tiers, sharing and intent, and price estimates with as-of date and confidence; money is exact integer minor units in one workspace currency.
+- The consolidated backlog: shared tools counted once at the largest demand, parts added up, stock and on-order quantities shown, unpriced items in their own bucket with totals labelled as lower bounds, and a workspace-level order.
+- The budget plan (balance as of a date, protected reserve, monthly contribution, horizon, contingency, month overrides) and the explainable timeline: a pure forecast with an optimistic and a conservative schedule, month-by-month opening, contribution, overrides, purchases and closing, and every guard from the RFC (not fundable, beyond horizon, stale estimate, blocked balance, stale balance, unpriced warning).
+- Purchases with lines, partial receipt into stock, status lifecycle, one-click "mark purchased" from the timeline; inventory movements with adjustments and consumption against a requirement; catalog merge with redirects.
+- Export and import of the whole workspace as one versioned JSON document, id for id, from the Data page, the API and the CLI; `projectbudget backup` for a consistent SQLite copy.
+- Sync of `project-budget.yaml` manifests from files under an import directory, fixed-column CSV, or GitHub repositories, with a dry-run plan, one-transaction apply, archive-on-missing and a run history; a JSON Schema for the manifest.
+- A JSON API under `/api/v1` mirroring every page action, with the OpenAPI document behind login.
+- `projectbudget run --demo` to try the app on fictional data; a Docker image with SQLite on a volume and an optional Compose file with PostgreSQL.
 - `projectbudget manifest validate PATH`: check a `project-budget.yaml`, or a CSV with `--project-id`, with the parser sync uses, no server or database needed; every schema problem is printed as `PATH:LINE: message` (or as JSON with `--format json`) and the exit code is 1 on any error, so a coding agent that just wrote the file can check it where it is (#78, ADR-013).
 - The README has a "How it works" section that walks the loop once, from adding projects and setting the budget to reading the backlog and timeline and recording a purchase, with a diagram, so a new owner knows the order to use the pages in (#67).
 - An agent kit under `docs/agents/`: an `AGENTS.md` section and a Claude Code `/shopping-list` skill to copy into a project repository, so a coding agent builds the shopping list as the manifest, checks it with `manifest validate`, and knows to ask for the export when it cannot reach the server; a test keeps every rule the kit states in step with the parser (#79, ADR-013).
@@ -50,22 +63,6 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 - Phone width: the navigation wraps, inline form fields fill the line one per row, and the backlog, timeline, requirements, catalog and purchases tables become labelled stacked rows below 640 px, so nothing scrolls sideways and the shortfall and price columns stay on screen (#15).
 - Static asset links carry the app version, so a browser never keeps an old stylesheet or script after an upgrade.
 - Destructive buttons (merge, cancel purchase, remove line, detach source, remove override, import) ask for confirmation first, and the merge form no longer preselects a target, so one stray click cannot merge two unrelated items (#17).
-
-## [0.1.0] - 2026-11-08
-
-The first release: the complete V1 scope of RFC v3, self-hosted as one process.
-
-### Added
-
-- Single-owner login with Argon2id passwords, database-backed sessions, CSRF protection, a database-backed login rate limit, security headers with a strict Content Security Policy, and hashed, revocable API tokens (read-only or read-write).
-- Projects, catalog items (consumable or reusable, with a stable slug and unit), requirements with priority tiers, sharing and intent, and price estimates with as-of date and confidence; money is exact integer minor units in one workspace currency.
-- The consolidated backlog: shared tools counted once at the largest demand, parts added up, stock and on-order quantities shown, unpriced items in their own bucket with totals labelled as lower bounds, and a workspace-level order.
-- The budget plan (balance as of a date, protected reserve, monthly contribution, horizon, contingency, month overrides) and the explainable timeline: a pure forecast with an optimistic and a conservative schedule, month-by-month opening, contribution, overrides, purchases and closing, and every guard from the RFC (not fundable, beyond horizon, stale estimate, blocked balance, stale balance, unpriced warning).
-- Purchases with lines, partial receipt into stock, status lifecycle, one-click "mark purchased" from the timeline; inventory movements with adjustments and consumption against a requirement; catalog merge with redirects.
-- Export and import of the whole workspace as one versioned JSON document, id for id, from the Data page, the API and the CLI; `projectbudget backup` for a consistent SQLite copy.
-- Sync of `project-budget.yaml` manifests from files under an import directory, fixed-column CSV, or GitHub repositories, with a dry-run plan, one-transaction apply, archive-on-missing and a run history; a JSON Schema for the manifest.
-- A JSON API under `/api/v1` mirroring every page action, with the OpenAPI document behind login.
-- `projectbudget run --demo` to try the app on fictional data; a Docker image with SQLite on a volume and an optional Compose file with PostgreSQL.
 
 [Unreleased]: https://github.com/sdeery14/project-budget/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/sdeery14/project-budget/releases/tag/v0.1.0
