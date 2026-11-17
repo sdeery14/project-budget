@@ -16,5 +16,6 @@ One file per decision, numbered in the order they were made. Each ADR has a Stat
 | [010](010-distribution.md) | Distribution | Accepted |
 | [011](011-deferred-list-is-binding.md) | Deferred list is binding | Accepted |
 | [012](012-per-project-lists-one-budget.md) | Per-project lists against one budget | Accepted |
+| [013](013-agent-access-manifest-first-mcp-over-api.md) | Agent access: manifest first, then an MCP server over the API | Proposed |
 
 The first eleven were accepted on 2026-11-07 with [RFC v3](../rfc/ProjectBudget-RFC-v3.md), which holds the full specification each ADR points into. New ADRs start from [000-template.md](000-template.md).
