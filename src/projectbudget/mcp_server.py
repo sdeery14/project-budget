@@ -164,14 +164,17 @@ def build_server(api: ApiClient) -> MCPServer[None]:
 
     @server.tool()
     async def get_catalog_item(item_id: str) -> str:
-        """One catalog item with its kind, unit, price, stock on hand and review state."""
+        """One catalog item: slug, name, kind, unit and review state.
+
+        Prices, stock on hand and quantities on order are on the backlog rows (get_backlog).
+        """
         return await api.call("get_catalog_item", {"item_id": item_id})
 
     @server.tool()
     async def search_catalog(
         include_merged: bool = False, review_state: ReviewState | None = None
     ) -> str:
-        """List catalog items; use it to find an existing item before adding a requirement."""
+        """List catalog items (slug, name, kind, unit, review state) to find an existing item before adding a requirement."""
         return await api.call(
             "search_catalog",
             params={"include_merged": include_merged, "review_state": review_state},
