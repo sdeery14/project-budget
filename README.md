@@ -70,6 +70,7 @@ Planning with a coding agent? [docs/agents/](docs/agents/) holds an `AGENTS.md` 
 | `projectbudget backup [--output PATH]` | consistent SQLite copy (`VACUUM INTO`) |
 | `projectbudget reset [--yes]` | empty the workspace, keeping the owner, sessions, tokens and currency |
 | `projectbudget sync SOURCE_ID [--dry-run] [--force]` | pull a manifest and apply its plan |
+| `projectbudget manifest validate PATH [--project-id ID] [--format json]` | check a `project-budget.yaml` (or a CSV) with the sync parser, no server needed; exit 1 lists every problem with its line |
 | `projectbudget db upgrade\|downgrade\|current` | migrations |
 
 ## Design and security

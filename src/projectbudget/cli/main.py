@@ -3,6 +3,7 @@
 The container entrypoint runs ``db upgrade`` and then ``run`` (ADR-010).
 """
 
+import json
 import os
 import sys
 from datetime import UTC, datetime
@@ -14,9 +15,11 @@ import uvicorn
 from pydantic import ValidationError
 
 from projectbudget import __version__, localtime
+from projectbudget.adapters import manifest as manifest_adapter
 from projectbudget.adapters.export_format import InvalidDocumentError, parse_document
 from projectbudget.adapters.sources import SourceFetchError
 from projectbudget.cli import demo as demo_mode
+from projectbudget.domain.manifest import ManifestError
 from projectbudget.domain.money import InvalidCurrencyError, validate_currency
 from projectbudget.persistence import backup, migrate
 from projectbudget.persistence.engine import UnsupportedDatabaseError, backend_name, make_engine
@@ -32,6 +35,10 @@ app = typer.Typer(
 )
 db_app = typer.Typer(help="Database migrations (Alembic).", no_args_is_help=True)
 app.add_typer(db_app, name="db")
+manifest_app = typer.Typer(
+    help="Work with project-budget.yaml files without a server (ADR-013).", no_args_is_help=True
+)
+app.add_typer(manifest_app, name="manifest")
 
 DATABASE_URL_ENV = "PROJECTBUDGET_DATABASE_URL"
 
@@ -400,6 +407,78 @@ def backup_cmd(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     typer.echo(f"Backup written to {written}")
+
+
+@manifest_app.command("validate")
+def manifest_validate(
+    path: Annotated[
+        Path,
+        typer.Argument(help="A project-budget.yaml, or a manifest CSV together with --project-id."),
+    ],
+    project_id: Annotated[
+        str | None,
+        typer.Option(
+            "--project-id",
+            help="The project id a CSV manifest belongs to (a CSV has no project block).",
+        ),
+    ] = None,
+    output: Annotated[
+        str, typer.Option("--format", help="text (one problem per line) or json.")
+    ] = "text",
+) -> None:
+    """Parse a manifest the way sync would and list every schema problem with its line.
+
+    Reads only the file: no database, no server. Exit 0 when the file is valid, 1 when it
+    is not, 2 for a usage error (#78, ADR-013).
+    """
+    # Plain stderr lines, not rich boxes: an agent reads these, and a wrapped box hides the flag.
+    if output not in ("text", "json"):
+        typer.echo("--format must be text or json", err=True)
+        raise typer.Exit(code=2)
+    is_csv = path.suffix.lower() == ".csv"
+    if is_csv and not project_id:
+        typer.echo(f"{path}: a CSV manifest has no project block; pass --project-id", err=True)
+        raise typer.Exit(code=2)
+    try:
+        content = path.read_bytes()
+    except OSError as exc:
+        typer.echo(f"{path}: {exc.strerror or exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    try:
+        manifest = (
+            manifest_adapter.parse_csv(content, project_id=project_id or "project")
+            if is_csv
+            else manifest_adapter.parse_yaml(content)
+        )
+    except ManifestError as exc:
+        if output == "json":
+            report = {
+                "path": str(path),
+                "valid": False,
+                "issues": [
+                    {"line": issue.line, "path": issue.path, "message": issue.message}
+                    for issue in exc.issues
+                ],
+            }
+            typer.echo(json.dumps(report, indent=2))
+        else:
+            for issue in exc.issues:
+                where = f"{path}:{issue.line}" if issue.line is not None else str(path)
+                typer.echo(f"{where}: {issue.path}: {issue.message}")
+        raise typer.Exit(code=1) from exc
+    count = len(manifest.items)
+    if output == "json":
+        report = {
+            "path": str(path),
+            "valid": True,
+            "project_id": manifest.project_id,
+            "project_name": manifest.project_name,
+            "items": count,
+        }
+        typer.echo(json.dumps(report, indent=2))
+    else:
+        noun = "item" if count == 1 else "items"
+        typer.echo(f"{path}: valid, {count} {noun}, project {manifest.project_id}")
 
 
 @db_app.command("upgrade")
