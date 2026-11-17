@@ -64,6 +64,39 @@ def test_backlog_says_covered_by_stock_only_once_requirements_exist(
     assert "covered by stock" not in idle
 
 
+def test_unpriced_backlog_rows_show_what_is_already_on_order(logged_in: TestClient) -> None:
+    """The "needs a price" table has the same On order column as the priced one (#70)."""
+    csrf = csrf_token_from(logged_in.get("/projects").text)
+    project = logged_in.post("/projects", data={"csrf_token": csrf, "name": "Garden gate"})
+    project_id = project.headers["location"].rsplit("/", 1)[1]
+    logged_in.post(
+        f"/projects/{project_id}/requirements",
+        data={"csrf_token": csrf, "item_text": "Gate hinge set", "qty": "6", "unit": "set"},
+    )
+    unpriced = logged_in.get("/backlog").text.split('id="unpriced-rows"')[1]
+    item_id = unpriced.split('id="unpriced-')[1].split('"')[0]
+    assert '<th class="num">On order</th>' in unpriced
+    assert 'data-label="On order">0</td>' in unpriced
+
+    ordered = logged_in.post(
+        "/purchases",
+        data={
+            "csrf_token": csrf,
+            "catalog_item_id": item_id,
+            "qty": "4",
+            "unit_price": "8.00",
+            "status": "ordered",
+            "shipping": "0",
+            "tax": "0",
+        },
+    )
+    assert ordered.status_code == 303, ordered.text
+    unpriced = logged_in.get("/backlog").text.split('id="unpriced-rows"')[1]
+    assert 'data-label="Needed">6 set</td>' in unpriced
+    assert 'data-label="Shortfall"><strong>6</strong></td>' in unpriced
+    assert 'data-label="On order">4</td>' in unpriced
+
+
 def test_core_journey_through_the_pages(logged_in: TestClient) -> None:
     csrf = _csrf(logged_in)
 

@@ -57,7 +57,7 @@
 <div class="table-wrap">
 <table id="unpriced-rows" class="responsive">
   <thead>
-    <tr><th>Item</th><th>Priority</th><th class="num">Needed</th><th class="num">On hand</th><th class="num">Shortfall</th><th>Projects</th></tr>
+    <tr><th>Item</th><th>Priority</th><th class="num">Needed</th><th class="num">On hand</th><th class="num">Shortfall</th><th class="num">On order</th><th>Projects</th></tr>
   </thead>
   <tbody>
     {% for row in backlog.unpriced %}
@@ -67,6 +67,7 @@
       <td class="num" data-label="Needed">{{ row.needed }} {{ row.item.unit }}</td>
       <td class="num" data-label="On hand">{{ row.on_hand }}</td>
       <td class="num" data-label="Shortfall"><strong>{{ row.gross_shortfall }}</strong></td>
+      <td class="num" data-label="On order">{{ row.on_order }}</td>
       <td data-label="Projects"><span>{% for pid in row.project_ids %}<a href="/projects/{{ pid }}">{{ project_names.get(pid, "?") }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span></td>
     </tr>
     {% endfor %}
