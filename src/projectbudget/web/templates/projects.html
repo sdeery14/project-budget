@@ -14,14 +14,14 @@
     <button type="submit">Create project</button>
   </form>
 
-  <table>
+  <table id="projects" class="responsive">
     <thead><tr><th>Project</th><th>Status</th><th>Notes</th></tr></thead>
     <tbody>
       {% for project in projects %}
       <tr{% if project.archived %} class="muted"{% endif %}>
-        <td><a href="/projects/{{ project.id }}">{{ project.name }}</a></td>
-        <td>{{ "archived" if project.archived else "active" }}</td>
-        <td>{{ project.notes }}</td>
+        <td data-label="Project"><a href="/projects/{{ project.id }}">{{ project.name }}</a></td>
+        <td data-label="Status">{{ "archived" if project.archived else "active" }}</td>
+        <td data-label="Notes">{{ project.notes }}</td>
       </tr>
       {% else %}
       <tr><td colspan="3" class="muted">No projects yet. Create one above, then add what it needs.</td></tr>
