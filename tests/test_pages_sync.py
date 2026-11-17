@@ -1,6 +1,7 @@
 """The sync pages: add a source, preview a plan (fetched or uploaded), apply, runs, detach."""
 
 from fastapi.testclient import TestClient
+from httpx2 import Response
 
 from conftest import csrf_token_from
 from projectbudget import localtime
@@ -22,6 +23,14 @@ items:
 
 def _csrf(client: TestClient) -> str:
     return csrf_token_from(client.get("/sync").text)
+
+
+def _landed(client: TestClient, response: Response) -> Response:
+    """A successful apply answers with one redirect to the source page (#69); return that page."""
+    assert response.status_code == 303, response.text
+    landed = client.get(response.headers["location"])
+    assert landed.status_code == 200
+    return landed
 
 
 def _import_dir(client: TestClient):  # type: ignore[no-untyped-def]
@@ -67,9 +76,18 @@ def test_sync_pages_end_to_end(logged_in: TestClient) -> None:
             "force": "true",
         },
     )
-    assert applied.status_code == 200
+    applied = _landed(logged_in, applied)
     assert "Applied" in applied.text
     assert "2 created" in applied.text
+    # Redirect after the write (#69): the banner is shown on the source page itself, a plain
+    # reload of that page is quiet, and the POST-only addresses answer a GET with a redirect.
+    assert str(applied.url.path) == f"/sync/{source_id}"
+    assert applied.url.params.get("applied")
+    assert "Applied" not in logged_in.get(f"/sync/{source_id}").text
+    for tail in ("preview", "apply"):
+        reopened = logged_in.get(f"/sync/{source_id}/{tail}")
+        assert reopened.status_code == 303, tail
+        assert reopened.headers["location"] == f"/sync/{source_id}", tail
     assert "Garden shed" in logged_in.get("/sync").text
     assert "<strong>100</strong>" in logged_in.get("/backlog").text  # screws: needs 100, none owned
 
@@ -108,7 +126,7 @@ def test_sync_pages_end_to_end(logged_in: TestClient) -> None:
             "force": "true",
         },
     )
-    assert applied_upload.status_code == 200
+    applied_upload = _landed(logged_in, applied_upload)
     assert "1 updated" in applied_upload.text
     assert "<strong>120</strong>" in logged_in.get("/backlog").text
 
@@ -178,7 +196,7 @@ def test_add_source_into_an_existing_project_shows_adoptions(logged_in: TestClie
             "force": "true",
         },
     )
-    assert applied.status_code == 200
+    applied = _landed(logged_in, applied)
     assert "1 created, 1 adopted" in applied.text
     projects_page = logged_in.get("/projects").text
     assert projects_page.count("Garden shed") >= 1
@@ -287,7 +305,7 @@ def _apply_file_source(client: TestClient, manifest: str, name: str = "shed.yaml
             )[0],
         },
     )
-    assert applied.status_code == 200, applied.text
+    _landed(client, applied)
     return source_id
 
 

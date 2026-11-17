@@ -230,8 +230,16 @@ def test_account_page_changes_the_password_and_keeps_this_session(
             "confirm_password": "a brand new password",
         },
     )
-    assert changed.status_code == 200
-    assert "Password changed" in changed.text
+    # Redirect after the write (#69): the browser ends on the account page, not the POST address.
+    assert changed.status_code == 303
+    assert changed.headers["location"] == "/settings/account?changed=1"
+    landed = client.get(changed.headers["location"])
+    assert landed.status_code == 200
+    assert "Password changed" in landed.text
+    assert "Password changed" not in client.get("/settings/account").text  # a plain reload is quiet
+    reopened = client.get("/settings/account/password")
+    assert reopened.status_code == 303
+    assert reopened.headers["location"] == "/settings/account"
     assert client.get("/backlog").status_code == 200  # this session stays signed in
 
     settings: Settings = client.app.state.settings  # type: ignore[attr-defined]

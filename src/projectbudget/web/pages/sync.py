@@ -6,6 +6,7 @@ the apply form as base64 so what you saw is what gets applied.
 
 import base64
 from typing import Annotated, Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -46,7 +47,7 @@ def _detail_context(
         "runs": sync.list_runs(factory, principal, source_id),
         "default_token_set": app_settings(request).effective_github_token is not None,
         "preview": None,
-        "result": None,
+        "applied_run": None,
         "content_b64": None,
         **extra,
     }
@@ -128,8 +129,21 @@ def create_source(  # nosec B107
 
 
 @router.get(SYNC_PATH + "/{source_id}", response_class=HTMLResponse)
-def source_page(request: Request, principal: Owner, source_id: str) -> HTMLResponse:
-    return render(request, "sync_source.html", _detail_context(request, principal, source_id))
+def source_page(
+    request: Request, principal: Owner, source_id: str, applied: str | None = None
+) -> HTMLResponse:
+    """The source page; ``?applied=<run id>`` shows the banner for a run this session just made."""
+    context = _detail_context(request, principal, source_id)
+    if applied:
+        context["applied_run"] = next((run for run in context["runs"] if run.id == applied), None)
+    return render(request, "sync_source.html", context)
+
+
+@router.get(SYNC_PATH + "/{source_id}/preview", include_in_schema=False)
+@router.get(SYNC_PATH + "/{source_id}/apply", include_in_schema=False)
+def back_to_source(principal: Owner, source_id: str) -> RedirectResponse:
+    """Preview and apply are POST-only; a bookmarked or re-opened address lands on the source page (#69)."""
+    return RedirectResponse(f"{SYNC_PATH}/{source_id}", status_code=303)
 
 
 # token_env is the NAME of an environment variable, never a secret.
@@ -214,8 +228,10 @@ def apply(
         )
     except USER_ERRORS as exc:
         return _detail_error(request, principal, source_id, exc)
-    return render(
-        request, "sync_source.html", _detail_context(request, principal, source_id, result=result)
+    # Redirect after the write (#69): a refresh re-reads the page instead of re-applying, and
+    # Back lands on a real address. The run id carries the banner across the redirect.
+    return RedirectResponse(
+        f"{SYNC_PATH}/{source_id}?applied={quote(result.run.id)}", status_code=303
     )
 
 
