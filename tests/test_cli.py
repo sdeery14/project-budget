@@ -312,15 +312,15 @@ def test_manifest_validate_lists_every_schema_error_with_its_line(tmp_path: Path
         "\n".join(
             [
                 "version: 1",
-                "project: {id: shed, name: Garden shed}",
+                "project: {id: garden-gate, name: Garden gate}",
                 "items:",
-                "  - id: screws",
-                "    name: Deck screws",
-                "    qty: 100",
-                "    estimate: {amount: 9.50, currency: USD}",  # bare float: rejected
-                "  - id: screws",  # duplicate id
-                "    name: More screws",
+                "  - id: gate-hinge-set",
+                "    name: Gate hinge set",
                 "    qty: 1",
+                "    estimate: {amount: 24.00, currency: USD}",  # bare float: rejected
+                "  - id: gate-hinge-set",  # duplicate id
+                "    name: M8 carriage bolt 80 mm",
+                "    qty: 12",
                 "    colour: red",  # unknown field
                 "",
             ]
@@ -344,35 +344,37 @@ def test_manifest_validate_lists_every_schema_error_with_its_line(tmp_path: Path
 def test_manifest_validate_accepts_a_good_file_and_a_csv(tmp_path: Path) -> None:
     good = tmp_path / "project-budget.yaml"
     good.write_text(
-        "version: 1\nproject: {id: shed, name: Garden shed}\nitems:\n"
-        '  - {id: screws, name: Deck screws, qty: 100, estimate: {amount: "9.50", currency: USD}}\n'
-        "  - {id: saw, name: Hand saw, qty: 1, kind: reusable}\n",
+        "version: 1\nproject: {id: garden-gate, name: Garden gate}\nitems:\n"
+        '  - {id: gate-hinge-set, name: Gate hinge set, qty: 1, unit: set, estimate: {amount: "24.00", currency: USD}}\n'
+        "  - {id: post-level, name: Post level, qty: 1, kind: reusable}\n",
         encoding="utf-8",
     )
     result = runner.invoke(app, ["manifest", "validate", str(good)])
     assert result.exit_code == 0, result.output
-    assert result.output.strip() == f"{good}: valid, 2 items, project shed"
+    assert result.output.strip() == f"{good}: valid, 2 items, project garden-gate"
     as_json = runner.invoke(app, ["manifest", "validate", str(good), "--format", "json"])
     assert json.loads(as_json.output) == {
         "path": str(good),
         "valid": True,
-        "project_id": "shed",
-        "project_name": "Garden shed",
+        "project_id": "garden-gate",
+        "project_name": "Garden gate",
         "items": 2,
     }
 
-    rows = tmp_path / "shed.csv"
+    rows = tmp_path / "garden-gate.csv"
     rows.write_text(
         "id,name,qty,unit,kind,priority,sharing,catalog,estimate\n"
-        "screws,Deck screws,100,,,,,,9.50\n",
+        "m8-carriage-bolt-80,M8 carriage bolt 80 mm,12,,,,,,0.60\n",
         encoding="utf-8",
     )
     without_project = runner.invoke(app, ["manifest", "validate", str(rows)])
     assert without_project.exit_code == 2, without_project.output
-    assert "--project-id" in without_project.output
-    with_project = runner.invoke(app, ["manifest", "validate", str(rows), "--project-id", "shed"])
+    assert "pass --project-id" in without_project.output
+    with_project = runner.invoke(
+        app, ["manifest", "validate", str(rows), "--project-id", "garden-gate"]
+    )
     assert with_project.exit_code == 0, with_project.output
-    assert "valid, 1 item, project shed" in with_project.output
+    assert "valid, 1 item, project garden-gate" in with_project.output
 
     missing = runner.invoke(app, ["manifest", "validate", str(tmp_path / "nope.yaml")])
     assert missing.exit_code == 1

@@ -431,13 +431,14 @@ def manifest_validate(
     Reads only the file: no database, no server. Exit 0 when the file is valid, 1 when it
     is not, 2 for a usage error (#78, ADR-013).
     """
+    # Plain stderr lines, not rich boxes: an agent reads these, and a wrapped box hides the flag.
     if output not in ("text", "json"):
-        raise typer.BadParameter("must be text or json", param_hint="--format")
+        typer.echo("--format must be text or json", err=True)
+        raise typer.Exit(code=2)
     is_csv = path.suffix.lower() == ".csv"
     if is_csv and not project_id:
-        raise typer.BadParameter(
-            "a CSV manifest has no project block; pass --project-id", param_hint="PATH"
-        )
+        typer.echo(f"{path}: a CSV manifest has no project block; pass --project-id", err=True)
+        raise typer.Exit(code=2)
     try:
         content = path.read_bytes()
     except OSError as exc:
