@@ -1,6 +1,6 @@
 # ADR-013: Agent access: manifest first, then an MCP server over the API
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-17
 **Implements:** RFC v3 §2 (per-project lists), §6 (sync), §7 (security); adds one interface to ADR-002 and ADR-005; amends the "Not in V1" list of RFC v3 §2 by naming what stays deferred
 
