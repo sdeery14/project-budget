@@ -6,6 +6,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Added
 
+- `projectbudget manifest validate PATH`: check a `project-budget.yaml`, or a CSV with `--project-id`, with the parser sync uses, no server or database needed; every schema problem is printed as `PATH:LINE: message` (or as JSON with `--format json`) and the exit code is 1 on any error, so a coding agent that just wrote the file can check it where it is (#78, ADR-013).
 - The README has a "How it works" section that walks the loop once, from adding projects and setting the budget to reading the backlog and timeline and recording a purchase, with a diagram, so a new owner knows the order to use the pages in (#67).
 - A project's name and notes can be edited on its page, and a requirement's quantity, priority, sharing and notes on its row, instead of through the API or by cancelling and re-adding (#13, #14). A quantity is refused below what the project has already consumed (`409` on `PATCH /api/v1/requirements/{id}` too). On a synced project the forms offer only what the manifest does not own: the notes, and a row's sharing and notes.
 - A favicon: the tab has an icon and the browser console no longer logs a 404 for `/favicon.ico` on every page (#16).

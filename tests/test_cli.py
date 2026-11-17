@@ -305,6 +305,84 @@ def test_export_needs_an_owner(migrated_url: str) -> None:
     assert "projectbudget init" in result.output
 
 
+def test_manifest_validate_lists_every_schema_error_with_its_line(tmp_path: Path) -> None:
+    """``manifest validate`` is the sync parser without a server: same errors, same lines (#78)."""
+    bad = tmp_path / "project-budget.yaml"
+    bad.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "project: {id: garden-gate, name: Garden gate}",
+                "items:",
+                "  - id: gate-hinge-set",
+                "    name: Gate hinge set",
+                "    qty: 1",
+                "    estimate: {amount: 24.00, currency: USD}",  # bare float: rejected
+                "  - id: gate-hinge-set",  # duplicate id
+                "    name: M8 carriage bolt 80 mm",
+                "    qty: 12",
+                "    colour: red",  # unknown field
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["manifest", "validate", str(bad)])
+    assert result.exit_code == 1, result.output
+    lines = [line for line in result.output.splitlines() if line.startswith(str(bad))]
+    assert len(lines) >= 3, result.output
+    reported = {int(line[len(str(bad)) + 1 :].split(":")[0]) for line in lines}
+    assert {7, 8, 11} <= reported, result.output
+
+    as_json = runner.invoke(app, ["manifest", "validate", str(bad), "--format", "json"])
+    assert as_json.exit_code == 1, as_json.output
+    report = json.loads(as_json.output)
+    assert report["valid"] is False
+    assert {issue["line"] for issue in report["issues"]} >= {7, 8, 11}
+
+
+def test_manifest_validate_accepts_a_good_file_and_a_csv(tmp_path: Path) -> None:
+    good = tmp_path / "project-budget.yaml"
+    good.write_text(
+        "version: 1\nproject: {id: garden-gate, name: Garden gate}\nitems:\n"
+        '  - {id: gate-hinge-set, name: Gate hinge set, qty: 1, unit: set, estimate: {amount: "24.00", currency: USD}}\n'
+        "  - {id: post-level, name: Post level, qty: 1, kind: reusable}\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["manifest", "validate", str(good)])
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == f"{good}: valid, 2 items, project garden-gate"
+    as_json = runner.invoke(app, ["manifest", "validate", str(good), "--format", "json"])
+    assert json.loads(as_json.output) == {
+        "path": str(good),
+        "valid": True,
+        "project_id": "garden-gate",
+        "project_name": "Garden gate",
+        "items": 2,
+    }
+
+    rows = tmp_path / "garden-gate.csv"
+    rows.write_text(
+        "id,name,qty,unit,kind,priority,sharing,catalog,estimate\n"
+        "m8-carriage-bolt-80,M8 carriage bolt 80 mm,12,,,,,,0.60\n",
+        encoding="utf-8",
+    )
+    without_project = runner.invoke(app, ["manifest", "validate", str(rows)])
+    assert without_project.exit_code == 2, without_project.output
+    assert "pass --project-id" in without_project.output
+    with_project = runner.invoke(
+        app, ["manifest", "validate", str(rows), "--project-id", "garden-gate"]
+    )
+    assert with_project.exit_code == 0, with_project.output
+    assert "valid, 1 item, project garden-gate" in with_project.output
+
+    missing = runner.invoke(app, ["manifest", "validate", str(tmp_path / "nope.yaml")])
+    assert missing.exit_code == 1
+    assert "nope.yaml" in missing.output
+    bad_format = runner.invoke(app, ["manifest", "validate", str(good), "--format", "xml"])
+    assert bad_format.exit_code == 2
+
+
 def test_a_bad_timezone_setting_stops_the_cli_with_a_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
