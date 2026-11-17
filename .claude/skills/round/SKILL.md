@@ -79,7 +79,8 @@ These are not judgment calls. Breaking one ends the round for that issue, with a
      Protection also requires the branch to be up to date, so after any other merge the armed
      PR stalls. Poll `gh pr view <pr> --json state,mergeStateStatus`: on `BEHIND`, run
      `gh api -X PUT repos/<owner>/<repo>/pulls/<pr>/update-branch` (a merge commit, never a
-     force push) and wait again; on `DIRTY`, `git merge origin/main` locally, resolve
+     force push) and wait again; on `DIRTY`, `git fetch origin && git merge origin/main`
+     locally (the polling commands never refresh the remote-tracking ref), resolve
      `CHANGELOG.md` by keeping both lines, push, comment `@codex review` so the state block
      covers the new head, and wait again. Neither counts as a fix round.
    - Otherwise label `needs-human` and comment that it is green, reviewed and waiting for the
