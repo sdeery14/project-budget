@@ -28,6 +28,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Fixed
 
+- When a sync preview finds the content unchanged, the notice now names the run it matches the way the Runs table does, by date and revision, instead of quoting a content hash that never matched the revision column for a GitHub source (#68).
 - The Docker image now reports the version it was built with: the build handed it to a setuptools-scm variable that hatch-vcs ignores, so `/health` and `projectbudget version` in the container said `0.0.0`. A rebuild with a new version also no longer reuses the previous version's project wheel from the uv cache. CI builds the image twice with different versions and asserts both.
 - The API tokens, price estimates, stock movements and budget override tables stack at phone width like the other tables, so the tokens page and an item page no longer scroll sideways at 320 px.
 - A synced project's page now says which source it follows, when that source was last applied and at which revision, with a link to the source page; its Add a requirement form warns that hand-added rows stay manual, and such rows carry a "manual" badge. The requirement API gains `source_id` for the same distinction (#35).
