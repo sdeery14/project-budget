@@ -46,6 +46,8 @@ One loop. Projects say what they need, the budget says what there is, and the tw
 
 Then repeat: edit the manifest or the project as plans change, sync again, and the queue moves with it. Nothing is deleted by a sync; items that leave a manifest are archived and keep their purchase history.
 
+Planning with a coding agent? [docs/agents/](docs/agents/) holds an `AGENTS.md` section and a Claude Code skill to copy into a project repository, so Claude Code, Codex or ChatGPT write the manifest for you and check it with `projectbudget manifest validate` before you sync it.
+
 ## What it does
 
 - **One backlog across projects.** Every project's active requirements in one queue: priority first, then project, then the project's own order, which for a synced project is the manifest's file order. A part that several projects need shows once: consumables add up, reusable tools count once for the largest single demand or per project when marked exclusive. Stock and on-order quantities are shown, so you see the shortfall and what is already coming.
