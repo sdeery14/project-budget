@@ -93,6 +93,10 @@ def test_sync_pages_end_to_end(logged_in: TestClient) -> None:
 
     again = logged_in.post(f"/sync/{source_id}/preview", data={"csrf_token": csrf})
     assert "nothing to do" in again.text.lower()
+    # The notice names the run the Runs table shows, not the content hash (#68).
+    revision = applied.text.split('data-label="Revision"><code>')[1].split("<")[0]
+    assert f"at revision <code>{revision}</code>: nothing to do" in again.text
+    assert "Same content as the run applied 20" in again.text  # dated, in the workspace zone
 
     uploaded = logged_in.post(
         f"/sync/{source_id}/preview",
