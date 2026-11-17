@@ -87,35 +87,35 @@
       <tbody>
         {% if plan.project_changes %}
         <tr><td data-label="Action"><span class="badge ok">project</span></td><td data-label="Item id"><code>{{ plan.project_id }}</code></td>
-          <td data-label="Detail">{% for ch in plan.project_changes %}{{ ch.field }} {{ ch.old if ch.old is not none else "unset" }} → {{ ch.new }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>
+          <td data-label="Detail"><span>{% for ch in plan.project_changes %}{{ ch.field }} {{ ch.old if ch.old is not none else "unset" }} → {{ ch.new }}{% if not loop.last %}; {% endif %}{% endfor %}</span></td></tr>
         {% endif %}
         {% for c in plan.creates %}
         <tr><td data-label="Action"><span class="badge ok">create</span></td><td data-label="Item id"><code>{{ c.external_id }}</code></td>
-          <td data-label="Detail">{{ c.item.name }}: {{ c.item.qty }} {{ c.item.unit }}, P{{ c.item.priority }}, {{ c.item.kind.value }}
+          <td data-label="Detail"><span>{{ c.item.name }}: {{ c.item.qty }} {{ c.item.unit }}, P{{ c.item.priority }}, {{ c.item.kind.value }}
             {% if c.catalog_exists %}→ existing catalog item <code>{{ c.slug }}</code>{% else %}→ new unreviewed item <code>{{ c.slug }}</code>{% endif %}
             {% if c.estimate %}, estimate {{ c.estimate }}{% endif %}
-            {% if c.likely_rename_of %} <span class="badge warn">likely rename of {{ c.likely_rename_of }}</span>{% endif %}</td></tr>
+            {% if c.likely_rename_of %} <span class="badge warn">likely rename of {{ c.likely_rename_of }}</span>{% endif %}</span></td></tr>
         {% endfor %}
         {% for a in plan.adoptions %}
         <tr><td data-label="Action"><span class="badge ok">adopt</span></td><td data-label="Item id"><code>{{ a.external_id }}</code></td>
-          <td data-label="Detail">{{ a.item_name }}: your requirement becomes this source's{% for ch in a.changes %}; {% if ch.field == "sort_order" %}position {{ ch.old + 1 }} → {{ ch.new + 1 }}{% else %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endif %}{% endfor %}
-            {% if a.estimate %}; estimate {{ a.estimate }}{% endif %}</td></tr>
+          <td data-label="Detail"><span>{{ a.item_name }}: your requirement becomes this source's{% for ch in a.changes %}; {% if ch.field == "sort_order" %}position {{ ch.old + 1 }} → {{ ch.new + 1 }}{% else %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endif %}{% endfor %}
+            {% if a.estimate %}; estimate {{ a.estimate }}{% endif %}</span></td></tr>
         {% endfor %}
         {% for u in plan.updates %}
         <tr><td data-label="Action"><span class="badge ok">{{ "reactivate" if u.reactivate else "update" }}</span></td><td data-label="Item id"><code>{{ u.external_id }}</code></td>
-          <td data-label="Detail">{% for ch in u.changes %}{% if ch.field == "sort_order" %}position {{ ch.old + 1 }} → {{ ch.new + 1 }}{% else %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+          <td data-label="Detail"><span>{% for ch in u.changes %}{% if ch.field == "sort_order" %}position {{ ch.old + 1 }} → {{ ch.new + 1 }}{% else %}{{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
             {% for ch in u.item_changes %}; item {{ ch.field }} {{ ch.old }} → {{ ch.new }}{% endfor %}
-            {% if u.estimate %}; new estimate {{ u.estimate }}{% endif %}</td></tr>
+            {% if u.estimate %}; new estimate {{ u.estimate }}{% endif %}</span></td></tr>
         {% endfor %}
         {% for a in plan.archives %}
-        <tr><td data-label="Action"><span class="badge warn">archive</span></td><td data-label="Item id"><code>{{ a.external_id }}</code></td><td data-label="Detail">{{ a.item_name }}: removed from source; purchases and consumption stay</td></tr>
+        <tr><td data-label="Action"><span class="badge warn">archive</span></td><td data-label="Item id"><code>{{ a.external_id }}</code></td><td data-label="Detail"><span>{{ a.item_name }}: removed from source; purchases and consumption stay</span></td></tr>
         {% endfor %}
         {% for r in plan.rejects %}
         <tr><td data-label="Action"><span class="badge warn">reject</span></td><td data-label="Item id"><code>{{ r.external_id }}</code></td>
-          <td data-label="Detail">{% if r.item_id %}<a href="/catalog/{{ r.item_id }}">{{ r.item_name }}</a>: {{ r.mismatch }}; this source may not change it because {{ r.because }}. {{ r.fix }}{% else %}{{ r.reason }}{% endif %}</td></tr>
+          <td data-label="Detail"><span>{% if r.item_id %}<a href="/catalog/{{ r.item_id }}">{{ r.item_name }}</a>: {{ r.mismatch }}; this source may not change it because {{ r.because }}. {{ r.fix }}{% else %}{{ r.reason }}{% endif %}</span></td></tr>
         {% endfor %}
         {% for r in plan.estimate_rejects %}
-        <tr><td data-label="Action"><span class="badge warn">estimate rejected</span></td><td data-label="Item id"><code>{{ r.external_id }}</code></td><td data-label="Detail">{{ r.reason }} (other fields apply)</td></tr>
+        <tr><td data-label="Action"><span class="badge warn">estimate rejected</span></td><td data-label="Item id"><code>{{ r.external_id }}</code></td><td data-label="Detail"><span>{{ r.reason }} (other fields apply)</span></td></tr>
         {% endfor %}
         {% if plan.empty and not plan.rejects %}
         <tr><td colspan="3" class="muted">Everything already matches; applying would change nothing.</td></tr>
