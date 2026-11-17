@@ -18,16 +18,17 @@
     {% if issues %}<ul>{% for issue in issues %}<li>{{ issue }}</li>{% endfor %}</ul>{% endif %}</div>
   {% endif %}
 
-  {% if result %}
+  {% if applied_run %}
+  {% set counts = applied_run.summary %}
   <div class="alert success" role="status">
-    {% if result.noop %}
+    {% if applied_run.status.value == "noop" %}
     <p><strong>Nothing to do.</strong> The source has the same content as the last applied run.</p>
     {% else %}
-    <p><strong>Applied</strong> revision <code>{{ result.run.revision[:12] }}</code>:
-      {{ result.plan.counts.creates }} created, {{ result.plan.counts.adoptions }} adopted, {{ result.plan.counts.updates }} updated,
-      {{ result.plan.counts.reactivations }} reactivated, {{ result.plan.counts.archives }} archived,
-      {{ result.plan.counts.rejects }} rejected.
-      {% if result.source.project_id %}<a href="/projects/{{ result.source.project_id }}">Open the project</a> · {% endif %}<a href="/backlog">Backlog</a></p>
+    <p><strong>Applied</strong> revision <code>{{ (applied_run.revision or "")[:12] }}</code>:
+      {{ counts.get("creates", 0) }} created, {{ counts.get("adoptions", 0) }} adopted, {{ counts.get("updates", 0) }} updated,
+      {{ counts.get("reactivations", 0) }} reactivated, {{ counts.get("archives", 0) }} archived,
+      {{ counts.get("rejects", 0) }} rejected.
+      {% if source.project_id %}<a href="/projects/{{ source.project_id }}">Open the project</a> · {% endif %}<a href="/backlog">Backlog</a></p>
     {% endif %}
   </div>
   {% endif %}

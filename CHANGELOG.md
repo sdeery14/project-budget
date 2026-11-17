@@ -29,6 +29,7 @@ All notable changes to ProjectBudget. The format follows [Keep a Changelog](http
 
 ### Fixed
 
+- Applying a sync plan and changing the password now redirect to the source page and the account page instead of answering on the form's POST address, so a browser refresh re-reads the page rather than resubmitting, and the preview, apply and password addresses answer a plain visit (Back, Forward, a pasted link) with a redirect instead of a bare `Method Not Allowed` (#69).
 - When a sync preview finds the content unchanged, the notice now names the run it matches the way the Runs table does, by date and revision, instead of quoting a content hash that never matched the revision column for a GitHub source (#68).
 - A purchase's lines table, the sync preview plan and the projects list stack at phone width like the other tables, so the Received column and the Receive button of a purchase line are on screen at 320 px instead of behind a sideways scroll (#66).
 - The backlog's "needs a price" table shows an "On order" column like the priced table, so an unpriced requirement that is already ordered no longer reads as if nothing were coming (#70).

@@ -7,7 +7,7 @@ session (or with ``projectbudget passwd`` on the host), never with an API token.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from projectbudget.domain.principal import Principal
 from projectbudget.services import auth, passwords
@@ -41,9 +41,20 @@ def _page(
 
 @router.get("", response_class=HTMLResponse)
 def account_page(
-    request: Request, principal: Annotated[Principal, Depends(require_owner)]
+    request: Request,
+    principal: Annotated[Principal, Depends(require_owner)],
+    changed: bool = False,
 ) -> HTMLResponse:
-    return _page(request, principal)
+    """The account page; ``?changed=1`` is where a successful password change lands (#69)."""
+    return _page(request, principal, changed=changed)
+
+
+@router.get("/password", include_in_schema=False)
+def password_form_address(
+    principal: Annotated[Principal, Depends(require_owner)],
+) -> RedirectResponse:
+    """The change form posts here; a re-opened address goes back to the account page (#69)."""
+    return RedirectResponse(ACCOUNT_PATH, status_code=303)
 
 
 @router.post("/password", response_class=HTMLResponse)
@@ -53,7 +64,7 @@ def change_password(
     current_password: Annotated[str, Form()],
     new_password: Annotated[str, Form()],
     confirm_password: Annotated[str, Form()],
-) -> HTMLResponse:
+) -> Response:
     if new_password != confirm_password:
         return _page(
             request,
@@ -75,4 +86,5 @@ def change_password(
         return _page(request, principal, error=str(exc), status_code=422)
     except auth.PasswordChangeRequiresSessionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-    return _page(request, principal, changed=True)
+    # Redirect after the write (#69): a refresh must not resubmit the form.
+    return RedirectResponse(f"{ACCOUNT_PATH}?changed=1", status_code=303)
