@@ -12,6 +12,7 @@ One owner's private budget data: projects, requirements, prices, stock, purchase
 | --- | --- | --- |
 | Browser ↔ app | the owner's authenticated session | anyone who can reach the port, other sites in the same browser |
 | API client ↔ app | a bearer token the owner issued | anyone holding a leaked token |
+| Agent (`projectbudget mcp`) ↔ app | the API token in the agent's environment; the server is a client of the API and adds no permissions | the agent's own inputs, validated by the API like any client's; anything that can read the agent's environment or MCP configuration |
 | App ↔ sync sources | the owner's import directory and `api.github.com` | manifest content, which may be written by someone else |
 | App ↔ database | the database user and file | other local users of the host |
 | Operator ↔ host | the person who runs `init` and keeps backups | everyone else |
