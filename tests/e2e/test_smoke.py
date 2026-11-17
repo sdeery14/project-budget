@@ -209,6 +209,60 @@ def test_a_sync_source_page_fits_a_phone(signed_in: Page, live_server: LiveServe
         page.goto(path)
         width = page.evaluate("() => document.documentElement.scrollWidth")
         assert width <= PHONE_WIDTH, f"{path} is {width}px wide at {PHONE_WIDTH}px"
+    # The plan table stacks too (#66): its wrapper would otherwise hide a sideways scroll.
+    page.goto(f"{live_server.url}/sync")
+    page.get_by_role("link", name="shed.yaml").click()
+    page.get_by_role("button", name="Fetch and preview").click()
+    _assert_stacked(page, "#plan", "Detail")
+
+
+def _assert_stacked(page: Page, table: str, last_label: str) -> None:
+    """Every cell of a .responsive table sits inside the phone viewport, the last one included."""
+    width = page.evaluate("() => document.documentElement.scrollWidth")
+    assert width <= PHONE_WIDTH, f"{page.url} is {width}px wide at {PHONE_WIDTH}px"
+    cell = page.locator(f"{table} tbody td[data-label='{last_label}']").first
+    expect(cell).to_be_visible()
+    box = cell.bounding_box()
+    assert box is not None, table
+    assert box["x"] + box["width"] <= PHONE_WIDTH, f"{table} {last_label} cell is off screen"
+
+
+def test_purchase_lines_and_projects_tables_stack_on_a_phone(
+    signed_in: Page, live_server: LiveServer
+) -> None:
+    """A purchase line's Receive button and the projects list are on screen at 320 px (#66)."""
+    page = signed_in
+    errors = _console_errors(page)
+
+    page.goto(f"{live_server.url}/projects")
+    page.get_by_label("New project").fill("Phone purchase")
+    page.get_by_role("button", name="Create project").click()
+    page.get_by_label("Item", exact=True).fill("Phone-width pads")
+    page.get_by_role("button", name="Add", exact=True).click()
+    expect(page.get_by_role("row", name=re.compile("Phone-width pads"))).to_be_visible()
+
+    page.goto(f"{live_server.url}/purchases")
+    page.get_by_label("First item").select_option(label="Phone-width pads (each)")
+    page.get_by_label("Qty").fill("2")
+    page.get_by_label(re.compile(r"^Unit price")).fill("4.00")
+    page.get_by_role("button", name="Record purchase").click()
+    expect(page.locator("#lines")).to_contain_text("0 / 2")
+    purchase_url = page.url
+
+    page.set_viewport_size({"width": PHONE_WIDTH, "height": 700})
+    page.goto(purchase_url)
+    _assert_stacked(page, "#lines", "Receive")
+    receive = page.locator("#lines").get_by_role("button", name="Receive")
+    expect(receive).to_be_visible()
+    box = receive.bounding_box()
+    assert box is not None
+    assert box["x"] + box["width"] <= PHONE_WIDTH, "Receive button is off screen"
+    receive.click()
+    expect(page.locator("#lines")).to_contain_text("2 / 2")
+
+    page.goto(f"{live_server.url}/projects")
+    _assert_stacked(page, "#projects", "Notes")
+    assert errors == []
 
 
 def test_tokens_item_and_budget_tables_fit_a_phone(

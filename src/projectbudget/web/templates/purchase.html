@@ -49,18 +49,18 @@
 <section class="card">
   <h2>Lines</h2>
   <div class="table-wrap">
-  <table id="lines">
+  <table id="lines" class="responsive">
     <thead><tr><th>Item</th><th class="num">Qty</th><th class="money">Unit price</th><th class="money">Line total</th><th class="num">Received</th><th>Receive</th><th></th></tr></thead>
     <tbody>
       {% for line in p.lines %}
       {% set item = items.get(line.catalog_item_id) %}
       <tr id="line-{{ line.id }}">
-        <td>{% if item %}<a href="/catalog/{{ item.id }}">{{ item.name }}</a> <span class="muted">({{ item.unit }})</span>{% else %}{{ line.catalog_item_id }}{% endif %}</td>
-        <td class="num">{{ line.qty }}</td>
-        <td class="money">{{ line.unit_price }}</td>
-        <td class="money">{{ line.total }}</td>
-        <td class="num">{{ line.received_qty }} / {{ line.qty }}</td>
-        <td>
+        <td data-label="Item"><span>{% if item %}<a href="/catalog/{{ item.id }}">{{ item.name }}</a> <span class="muted">({{ item.unit }})</span>{% else %}{{ line.catalog_item_id }}{% endif %}</span></td>
+        <td class="num" data-label="Qty">{{ line.qty }}</td>
+        <td class="money" data-label="Unit price">{{ line.unit_price }}</td>
+        <td class="money" data-label="Line total">{{ line.total }}</td>
+        <td class="num" data-label="Received">{{ line.received_qty }} / {{ line.qty }}</td>
+        <td data-label="Receive">
           {% if p.open and line.remaining > 0 %}
           <form method="post" action="/purchases/{{ p.id }}/lines/{{ line.id }}/receive" class="actions">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
