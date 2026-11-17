@@ -23,6 +23,29 @@ PostgreSQL users: `cp .env.example .env`, set `POSTGRES_PASSWORD`, `docker compo
 
 There are no default credentials: the app serves only `/health` until `init` has run. The session cookie is `Secure` by default; browsers treat `localhost` as secure, so that only matters for plain HTTP on another host (`PROJECTBUDGET_SECURE_COOKIES=false` relaxes it on a trusted network).
 
+## How it works
+
+One loop. Projects say what they need, the budget says what there is, and the two read-only pages in the middle answer the question at the top of this file.
+
+```text
+ ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐
+ │ 1 Projects │──►│ 2 Budget   │──►│ 3 Backlog  │──►│ 4 Timeline │──►│ 5 Purchase │
+ │ what each  │   │ what you   │   │ what to    │   │ when the   │   │ order,     │
+ │ one needs  │   │ have       │   │ buy next   │   │ money is   │   │ receive,   │
+ │            │   │            │   │            │   │ there      │   │ consume    │
+ └────────────┘   └────────────┘   └────────────┘   └────────────┘   └─────┬──────┘
+       ▲                                                                   │
+       └──── manifests re-sync as projects change; stock lowers the need ◄─┘
+```
+
+1. **Add projects.** On the Projects page, type what a project needs: a name, a quantity, a priority. Or keep a `project-budget.yaml` next to the project, in a folder under the import directory or in a GitHub repository, add it as a sync source, preview the plan and apply it ([manifest guide](docs/manifest.md)). A synced project follows its manifest; a hand-made one is yours to edit.
+2. **Set the budget.** On the Budget page, enter the balance set aside for projects, the date it was true, a protected reserve the timeline never spends below, and the monthly contribution.
+3. **Read the backlog.** One queue across every project, priority first, with stock and open orders already subtracted and unpriced items flagged rather than summed. Price an item from its catalog page when the backlog says it needs one.
+4. **Read the timeline.** The same queue laid against the budget month by month: for each item, the month it becomes affordable, and for each month, opening balance, contribution, purchases and closing balance.
+5. **Buy.** Click "Mark purchased" on the timeline, or record the order on the Purchases page. Receive it when it arrives, which puts it in stock and records the price you paid, then consume it against the project when you use it. The backlog and timeline update on their own.
+
+Then repeat: edit the manifest or the project as plans change, sync again, and the queue moves with it. Nothing is deleted by a sync; items that leave a manifest are archived and keep their purchase history.
+
 ## What it does
 
 - **One backlog across projects.** Every project's active requirements in one queue: priority first, then project, then the project's own order, which for a synced project is the manifest's file order. A part that several projects need shows once: consumables add up, reusable tools count once for the largest single demand or per project when marked exclusive. Stock and on-order quantities are shown, so you see the shortfall and what is already coming.
