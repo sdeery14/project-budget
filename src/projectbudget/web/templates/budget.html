@@ -36,7 +36,7 @@
     a floor the timeline never spends below, not money you owe: with a balance smaller than the reserve the timeline starts at
     0 spendable and fills the reserve first.</p>
   {% if plan %}
-  <p class="muted">Last saved {{ plan.updated_at.strftime("%Y-%m-%d %H:%M") }} UTC ·
+  <p class="muted">Last saved {{ plan.updated_at | local }} ({{ tz_label }}) ·
     <a href="/timeline">See the timeline</a></p>
   {% else %}
   <p class="muted">No plan yet. Enter a balance to unlock the timeline.</p>

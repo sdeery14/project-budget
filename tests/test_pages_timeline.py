@@ -1,12 +1,14 @@
 """The budget and timeline pages: plan form, overrides, month-by-month table, mark purchased."""
 
 import html
+import re
 from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
 
 from conftest import csrf_token_from
+from projectbudget import localtime
 from projectbudget.domain.principal import Principal
 from projectbudget.fixtures.canonical import CanonicalWorkspace, seed_canonical
 from projectbudget.persistence.session import SessionFactory
@@ -58,6 +60,12 @@ def test_budget_page_creates_a_plan_and_overrides(logged_in: TestClient) -> None
     assert 'value="150.00"' in page
     assert 'value="2026-11-01"' in page
     assert "Month overrides" in page
+    # "Last saved" is in the workspace zone and names it, like every other timestamp (#71).
+    last_saved = page.split("Last saved ")[1].split("·")[0]
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} \(" + re.escape(localtime.label()) + r"\) ", last_saved
+    ), last_saved
+    assert " UTC ·" not in page
 
     added = logged_in.post(
         "/budget/overrides",
