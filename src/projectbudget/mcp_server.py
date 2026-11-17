@@ -26,7 +26,8 @@ from pydantic import BaseModel, Field
 from projectbudget import __version__
 from projectbudget.domain.catalog import ItemKind, PurchaseStatus, ReviewState, Sharing
 
-TOKEN_ENV = "PROJECTBUDGET_API_TOKEN"  # noqa: S105  # nosec B105  (a variable name, not a secret)
+# The name of the variable, not a secret; ruff and bandit both pattern-match on "token".
+TOKEN_ENV = "PROJECTBUDGET_API_TOKEN"  # noqa: S105  # nosec B105
 URL_ENV = "PROJECTBUDGET_URL"
 DEFAULT_URL = "http://127.0.0.1:8000"
 API_PREFIX = "/api/v1"
